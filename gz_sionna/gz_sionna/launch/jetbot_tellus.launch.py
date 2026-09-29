@@ -23,6 +23,25 @@ Sensors システムは描画コンテキストを要求するため、設定し
 
     export LIBGL_ALWAYS_SOFTWARE=1
     export QT_QPA_PLATFORM=xcb
+
+シミュレーション速度について
+----------------------------
+実時間係数が 1.0 を大きく下回る。原因を切り分けた結果は次のとおり。
+
+    Sensors あり + ロボット spawn      real_time_factor 0.262
+    Sensors なし + ロボット spawn      real_time_factor 0.263
+    Sensors あり + ロボットなし        real_time_factor 1.000
+
+Sensors システム (カメラと LiDAR の描画) は原因ではない。ロボットを
+spawn した時点で 1.0 から 0.26 に落ちており、支配的なのは物理演算側である。
+
+jetbot_real.urdf.xacro は 20 個すべてのリンクで、視覚用の高精細 STL を
+そのまま衝突形状にも使っている (合計 37.3 MB、nano_link.STL 単体で 18.7 MB)。
+DART がこれを毎ステップ衝突判定するため重い。
+
+改善するなら衝突形状を簡略化する。ほとんどのリンクは固定関節で base_link に
+まとめられるので、箱や円柱で近似しても挙動は変わらない。接地に関わるのは
+車輪とキャスタだけである。移植の範囲を超えるため本 PR では扱っていない。
 """
 
 import os
@@ -63,21 +82,7 @@ def generate_launch_description():
         DeclareLaunchArgument('yaw', default_value='-1.573762'),
         DeclareLaunchArgument('view_result_image', default_value='false'),
         # カメラと LiDAR を ROS 側へ橋渡しするか。ROS 側の負荷を下げたい場合に
-        # false にする。
-        #
-        # 注意: これを false にしてもシミュレーションの速度は改善しない。
-        # GPU が使えない環境 (LIBGL_ALWAYS_SOFTWARE=1) で計測した実時間係数は
-        # 次のとおりで、ブリッジの有無で変わらなかった。
-        #
-        #   bridge_sensors:=true   real_time_factor 0.0086 - 0.017
-        #   bridge_sensors:=false  real_time_factor 0.0085
-        #   /clock  12 - 15 Hz (本来 1000 Hz)
-        #   /imu    0.43 Hz    (本来 30 Hz)
-        #
-        # world の Sensors システムが購読者の有無にかかわらず描画している
-        # ためと思われるが、未確認。一方 ROS を介さず gz へ直接指令を送った
-        # 場合は 6 秒で 1.767 m 走行できており、この環境でも条件次第では
-        # 実用速度が出る。C-JEPA の学習には GPU が使える環境を用意すること。
+        # false にする。シミュレーションの速度には影響しない (下記参照)。
         DeclareLaunchArgument('bridge_sensors', default_value='true'),
     ]
 
