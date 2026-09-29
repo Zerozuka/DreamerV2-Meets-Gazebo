@@ -15,12 +15,24 @@ no_preview = False # Toggle to False to use the preview widget
 from sionna.rt import load_scene, PlanarArray, Transmitter, Receiver, Camera,\
                       PathSolver, RadioMapSolver, subcarrier_frequencies
 
+# --- リポジトリ内資産のパス解決 -------------------------------------------
+# 元は開発者の home を指す絶対パス (/home/icon-group/...) がハードコードされて
+# いたが、実体は gz_sionna パッケージに同梱されている。ament_index で share の
+# 位置を引いて組み立てる。
+from ament_index_python.packages import get_package_share_directory as _gz_share
+
+
+def _gz_model(*parts):
+    """gz_sionna の models/ 配下のパスを返す。"""
+    return os.path.join(_gz_share("gz_sionna"), "models", *parts)
+# --------------------------------------------------------------------------
+
 
 # In[60]:
 
 
-# scene = load_scene("/home/icon-group/Documents/Josh/sionna/Tellus/sionna_test/withtop/untitled.xml") # Try also sionna.rt.scene.etoile
-scene = load_scene("/home/icon-group/catkin_ws/src/gz_sionna/gz_sionna/models/with_materials/untitled.xml") 
+# scene = load_scene(_gz_model("withtop", "untitled.xml")) # Try also sionna.rt.scene.etoile
+scene = load_scene(_gz_model("with_materials", "untitled.xml")) 
 
 
 

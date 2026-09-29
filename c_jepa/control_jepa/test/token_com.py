@@ -23,13 +23,14 @@ from models.vit_decoder import ViTDecoder
 from models.temporal_transformer import TemporalTransformer
 from utils.patch_utils import patches_to_image
 import psutil
+from paths import model_path, output_path
 
-AE_CKPT = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/vit_model/autoencoder3.pt"
-TEMP_CKPT = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/vit_model/temporal3.pt"
+AE_CKPT = model_path("vit_model", "autoencoder3.pt")
+TEMP_CKPT = model_path("vit_model", "temporal3.pt")
 
-csv_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/predicted_power_log.csv"
+csv_path = output_path("predicted_power_log.csv")
 case_id = "case_7/"
-output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/baseline_dqn/" + case_id
+output_dir = output_path("baseline_dqn") + case_id
 _video_writers = {} 
 last_completed = None
 current_image = None
@@ -362,7 +363,7 @@ if __name__ == "__main__":
 
     MODEL_PATH = "training/gazebo/gazebo_step_230000.pt"    #gazebo_step_50000 gazebo_best
 
-    env = ImageEnv(GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv"))
+    env = ImageEnv(GazeboEnv())
 
     state_dim = (4, 84, 84)
     action_dim = env.action_space.n

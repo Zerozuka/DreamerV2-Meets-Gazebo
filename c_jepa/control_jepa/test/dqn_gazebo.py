@@ -215,7 +215,7 @@ class DQN:
 # ============================================================
 
 env = ImageEnv(
-    GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv")
+    GazeboEnv()
 )
 
 agent = DQN((4, 84, 84), env.action_space.n)

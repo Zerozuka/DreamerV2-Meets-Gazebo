@@ -29,17 +29,18 @@ from models.vit_encoder import ViTEncoder
 from models.vit_decoder import ViTDecoder
 from models.temporal_transformer import TemporalTransformer
 from utils.patch_utils import patches_to_image
+from paths import model_path, output_path
 
 
 
-AE_CKPT = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/vit_model/autoencoder1.pt"
-TEMP_CKPT = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/vit_model/temporal1.pt"
+AE_CKPT = model_path("vit_model", "autoencoder1.pt")
+TEMP_CKPT = model_path("vit_model", "temporal1.pt")
 # -------------------------
 # GLOBALS
 # -------------------------
-csv_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/predicted_power_log.csv"
+csv_path = output_path("predicted_power_log.csv")
 case_id = "case_0/"
-output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/baseline/" + case_id
+output_dir = output_path("baseline") + case_id
 _video_writers = {} 
 last_completed = None
 current_image = None
@@ -586,7 +587,7 @@ if __name__ == "__main__":
     pred_video1 = output_dir + "Video/pred_frame1.mp4"
     flag_pub = rospy.Publisher('/render_trigger', Int32, queue_size=10)
     
-    env = GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv")
+    env = GazeboEnv()
     
     datapath = output_dir + "Baseline_results.pt"
     obs, _ = env.reset()

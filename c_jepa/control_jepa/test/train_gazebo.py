@@ -17,6 +17,7 @@ import rospy
 
 from gazebo_env import GazeboEnv
 from gazebo_wrappers import ImageEnv, OneHotAction
+from paths import model_path
 
 
 # import tensorflow as tf
@@ -118,7 +119,7 @@ def main(args):
     model_dir = os.path.join(result_dir, 'models')                                                  #dir to save learnt models
     os.makedirs(model_dir, exist_ok=True)
 
-    env = GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv")
+    env = GazeboEnv()
 
     env = ImageEnv(env, skip_frames=3, stack_frames=4, initial_no_op=5)
     env = OneHotAction(env)
@@ -166,7 +167,7 @@ def main(args):
     trainer = Trainer(config, device)
     evaluator = Evaluator(config, device)
 
-    pretrained_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/results/CarRacing-v2_0_pomdp/models/models_best_based.pth"
+    pretrained_path = model_path("results", "CarRacing-v2_0_pomdp", "models", "models_best_based.pth")
     if os.path.exists(pretrained_path):
         print(f"Loading pretrained model from {pretrained_path}")
         saved_dict = torch.load(pretrained_path, map_location=device)

@@ -16,6 +16,23 @@ import numpy as np
 from sionna.rt import load_scene, PlanarArray, Transmitter, Receiver, Camera,PathSolver, RadioMapSolver, subcarrier_frequencies, ITURadioMaterial, SceneObject
 from sionna.phy.channel import subcarrier_frequencies , cir_to_ofdm_channel
 
+# --- リポジトリ内資産のパス解決 -------------------------------------------
+# 元は開発者の home を指す絶対パス (/home/icon-group/...) がハードコードされて
+# いたが、実体は gz_sionna パッケージに同梱されている。ament_index で share の
+# 位置を引いて組み立てる。
+from ament_index_python.packages import get_package_share_directory as _gz_share
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__),
+    "..", "..", "control_jepa", "test"))
+from paths import output_path
+
+
+def _gz_model(*parts):
+    """gz_sionna の models/ 配下のパスを返す。"""
+    return os.path.join(_gz_share("gz_sionna"), "models", *parts)
+# --------------------------------------------------------------------------
+
+
 
 robot1_pos = Point(0,0,0)
 robot1_orien = Point(0,0,0)
@@ -56,15 +73,15 @@ def main():
     done_pub = rospy.Publisher("/render_done", Int32, queue_size=10)
     rospy.loginfo("Subscribed to /robot_position")
 
-    scene = load_scene("/home/icon-group/catkin_ws/src/gz_sionna/gz_sionna/models/with_materials/untitled.xml") 
-    car_path = "/home/icon-group/catkin_ws/src/gz_sionna/gz_sionna/models/jetbot_real/jet.obj"
-    cube_path = "/home/icon-group/catkin_ws/src/gz_sionna/gz_sionna/models/jepa_objects/cube.obj"
-    ball_path = "/home/icon-group/catkin_ws/src/gz_sionna/gz_sionna/models/jepa_objects/ball.obj"
-    cylinder_path = "/home/icon-group/catkin_ws/src/gz_sionna/gz_sionna/models/jepa_objects/cylinder.obj"
+    scene = load_scene(_gz_model("with_materials", "untitled.xml")) 
+    car_path = _gz_model("jetbot_real", "jet.obj")
+    cube_path = _gz_model("jepa_objects", "cube.obj")
+    ball_path = _gz_model("jepa_objects", "ball.obj")
+    cylinder_path = _gz_model("jepa_objects", "cylinder.obj")
 
 
 
-    output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/Proposed/case_0/"
+    output_dir = output_path("Proposed", "case_0")
     os.makedirs(output_dir, exist_ok=True)
 
     cube_material = ITURadioMaterial(

@@ -24,6 +24,20 @@ from gazebo_env import GazeboEnv
 from gazebo_wrappers import ImageEnv, OneHotAction
 from dreamerv2.training.config_ import RacingCarConfig
 
+# --- リポジトリ内資産のパス解決 -------------------------------------------
+# 元は開発者の home を指す絶対パス (/home/icon-group/...) がハードコードされて
+# いたが、実体は gz_sionna パッケージに同梱されている。ament_index で share の
+# 位置を引いて組み立てる。
+from ament_index_python.packages import get_package_share_directory as _gz_share
+from paths import model_path, output_path
+
+
+def _gz_model(*parts):
+    """gz_sionna の models/ 配下のパスを返す。"""
+    return os.path.join(_gz_share("gz_sionna"), "models", *parts)
+# --------------------------------------------------------------------------
+
+
 no_preview = False
 
 
@@ -39,10 +53,10 @@ def main():
     robot1_pos = Point()
     robot1_orien = Point()
 
-    scene = load_scene("/home/icon-group/Documents/Josh/sionna/Tellus/sionna_test/with_materials/untitled.xml") 
-    car_path = "/home/icon-group/Documents/Josh/sionna/Tellus/sionna_test/jetbot_real/jet.obj"
-    dataset_file = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/Proposed/case_0/proposed_results.pt"
-    save_file = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/Proposed/case_0/"
+    scene = load_scene(_gz_model("with_materials", "untitled.xml")) 
+    car_path = _gz_model("jetbot_real", "jet.obj")
+    dataset_file = model_path("Proposed", "case_0", "proposed_results.pt")
+    save_file = output_path("Proposed", "case_0")
 
 
     data = torch.load(dataset_file, map_location="cpu",weights_only=False)
@@ -233,7 +247,7 @@ def main():
                          resolution=[650,500],
                          paths =paths);
 
-    # save_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/baseline/channel_baseline_case_8.pt" 
+    # save_path = model_path("baseline", "channel_baseline_case_8.pt") 
     # torch.save(dataset, save_path)
     # print(f"Saved dataset with channels → {save_path}")
 

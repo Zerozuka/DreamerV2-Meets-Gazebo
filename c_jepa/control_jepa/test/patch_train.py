@@ -19,13 +19,14 @@ import time
 from dreamerv2.training.config_ import RacingCarConfig
 from tqdm.auto import tqdm
 import time
+from paths import model_path
 
 # ======================================================
 # CONFIG
 # ======================================================
 case_id = 9
-output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/trained_model/"
-DATA_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/proposed_results.pt"
+output_dir = model_path("masked_data", "trained_model")
+DATA_PATH = model_path("masked_data", "proposed_results.pt")
 BATCH_SIZE = 64
 EPOCHS = 200
 LR = 1e-3
@@ -508,7 +509,7 @@ def train():
     print("Device:", device)
     # device = "cpu"
     # model_path = "path/to/saved_model.pth"
-    model_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/results/CarRacing-v2_0_pomdp/20_dec_gazebo/models_best_8.pth"  #31_oct_gym  7_nov_Gazebo
+    model_path = model_path("results", "CarRacing-v2_0_pomdp", "20_dec_gazebo", "models_best_8.pth")  #31_oct_gym  7_nov_Gazebo
     config = RacingCarConfig(capacity=1)
     RSSMModel, ObsEncoderModel, ActionModel = load_model(config, model_path, "cpu")
 

@@ -12,12 +12,55 @@ from nav_msgs.msg import Odometry
 import tf_transformations as tft
 from gymnasium import Env
 from gymnasium import spaces
-from std_srvs.srv import Empty
-from gazebo_msgs.srv import SetModelState
-from gazebo_msgs.msg import ModelState
+import os
+import sys
 import matplotlib.pyplot as plt
 from gymnasium import spaces
-from gazebo_msgs.srv import GetPhysicsProperties
+
+# Gazebo Harmonic では gazebo_msgs の以下が使えない。gz-transport を叩く
+# ラッパー (gz_sionna/src/gz_world_control.py) に置き換えた。
+#
+#   gazebo_msgs.srv.SetModelState        -> GzWorldControl.set_pose
+#   gazebo_msgs.srv.GetPhysicsProperties -> 廃止 (max_step_size は設定値)
+#   std_srvs.srv.Empty (pause/unpause)   -> GzWorldControl.pause / unpause
+#
+# gz_sionna はまだ Python モジュールを install していない (dreamerv2 / utils の
+# 名前衝突を解消するまで packages=[] のため) ので、share のパスを ament_index
+# 経由で解決して import する。衝突解消後は普通の import に直す。
+from ament_index_python.packages import get_package_share_directory
+sys.path.insert(0, os.path.join(get_package_share_directory('gz_sionna'), 'src'))
+from gz_world_control import GzWorldControl  # noqa: E402
+
+
+def _resolve_data_file(env_var, filename, description):
+    """データファイルのパスを解決する。
+
+    元は開発者の home を指す絶対パス (/home/icon-group/catkin_ws/src/...) が
+    ハードコードされていて、他のマシンでは動かなかった。次の順で探す。
+
+      1. 環境変数 env_var
+      2. カレントディレクトリ直下の filename
+
+    どちらにも無ければ、何を用意すべきかを示して例外にする。
+    """
+    path = os.environ.get(env_var)
+    if path:
+        if not os.path.exists(path):
+            raise FileNotFoundError(
+                f"{env_var}={path} が指すファイルが存在しない ({description})"
+            )
+        return path
+
+    local = os.path.join(os.getcwd(), filename)
+    if os.path.exists(local):
+        return local
+
+    raise FileNotFoundError(
+        f"{description} が見つからない。\n"
+        f"  環境変数 {env_var} にパスを設定するか、\n"
+        f"  カレントディレクトリに {filename} を置くこと。\n"
+        f"  このファイルはリポジトリに含まれておらず、著者に照会中である。"
+    )
 import random
 import torch
 
@@ -26,10 +69,19 @@ MUD_COLOR = (0, 0, 0)
 
 
 class GazeboEnv(Env):
-    def __init__(self, path_file, robot_ns=""):
+    def __init__(self, path_file=None, robot_ns=""):
         super(GazeboEnv, self).__init__()
+
+        # Gazebo Harmonic の world 制御。Classic の /gazebo/* サービスの代替。
+        self.gz = GzWorldControl(world=os.environ.get("GZ_WORLD", "default"))
+        self.robot_model_name = os.environ.get("GZ_ROBOT_NAME", "jetbot_1")
+
         # === Load trajectory ===
         self.bridge = CvBridge()
+        if path_file is None:
+            path_file = _resolve_data_file(
+                "JEPA_PATH_POINTS", "path_points.csv",
+                "経路点の CSV (列 x, y, yaw)")
         self.path = self._load_path(path_file)
         self.lookahead_distance = 0.5
         self.goal_tolerance = 0.15
@@ -67,8 +119,9 @@ class GazeboEnv(Env):
         self.current_pose = None
         self.current_image = None
 
-        self.cross_lines = self._load_cross_lines("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/cross_markers_400.csv")
-        # self.cross_lines = self._load_cross_lines("/home/icon-group/catkin_ws/src/aws-robomaker-hospital-world/src/cross_lines.csv")
+        self.cross_lines = self._load_cross_lines(_resolve_data_file(
+            "JEPA_CROSS_MARKERS", "cross_markers_400.csv",
+            "通過判定線の CSV (列 x1, y1, x2, y2)"))
         
         self.visited_lines = set()
         self.total_lines = len(self.cross_lines)
@@ -1070,36 +1123,10 @@ class GazeboEnv(Env):
 
     def reset(self, seed=None, options=None):
 
-        def is_gazebo_paused():
-            rospy.wait_for_service('/gazebo/get_physics_properties')
-            try:
-                get_physics = rospy.ServiceProxy('/gazebo/get_physics_properties', GetPhysicsProperties)
-                physics = get_physics()
-                return physics.pause  # True if paused, False if running
-            except rospy.ServiceException as e:
-                rospy.logerr(f"Service call failed: {e}")
-                return None
-
-        def pause_gazebo():
-            rospy.wait_for_service('/gazebo/pause_physics')
-            pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
-            pause()
-            # rospy.loginfo("Simulation paused")
-
-        def unpause_gazebo():
-            rospy.wait_for_service('/gazebo/unpause_physics')
-            unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
-            unpause()
-            # rospy.loginfo("Simulation running")
-
-        paused = is_gazebo_paused()
-        if paused is None:
-            print("Could not determine Gazebo state.")
-        elif paused:
-            print("Gazebo is currently PAUSED.")
-            unpause_gazebo()
-        else:
-            print("running")
+        # Classic は /gazebo/get_physics_properties で一時停止状態を問い合わせて
+        # いたが、Harmonic に同等のサービスはない。状態を読まずに常に unpause を
+        # 送る方が単純で、既に走っていても無害である。
+        self.gz.unpause()
 
         """Reset the environment and return the first observation."""
         # super().reset(seed=seed)
@@ -1135,47 +1162,30 @@ class GazeboEnv(Env):
        
 
         
-        rospy.wait_for_service('/gazebo/set_model_state')
-        set_model_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
-        
-        # 
+        # ロボットを初期姿勢へ戻す。Classic の /gazebo/set_model_state を
+        # Harmonic の /world/<name>/set_pose に置き換えた。
+        #
+        # Classic の SetModelState は twist (速度) も 0 に指定できたが、
+        # Harmonic の set_pose は姿勢のみである。速度を止めるため cmd_vel に 0 を
+        # 送ってから姿勢を変える。
+        #
+        # reset_all() は使えない。world SDF に書かれていない実行時 spawn の
+        # モデルを削除してしまい、launch で置いたロボットが world から消える
+        # (gz_world_control.py の docstring 参照)。
+        #
+        # 初期姿勢は jetbot_tellus.launch.py の既定値と揃えている。
+        x_pos = float(os.environ.get("JEPA_INIT_X", 5.163443))
+        y_pos = float(os.environ.get("JEPA_INIT_Y", 7.766847))
+        z_pos = float(os.environ.get("JEPA_INIT_Z", 0.0))
+        yaw = float(os.environ.get("JEPA_INIT_YAW", -1.573762))
 
-        # Define robot initial pose (from launch file)
-        x_pos = 5.163443
-        y_pos = 7.766847
-        z_pos = 0.0
-        yaw   = -1.573762
-
-        # x_pos =-4.978963185574756
-        # y_pos = 2.1908339594290007
-        # z_pos = 0.0
-        # yaw   = 1.4610034096408715
-
-        # Convert yaw → quaternion
-        quat = tft.quaternion_from_euler(0, 0, yaw)
-
-        # Create model state message
-        state = ModelState()
-        state.model_name = "jetbot_1"
-        state.pose.position.x = x_pos
-        state.pose.position.y = y_pos
-        state.pose.position.z = z_pos
-        state.pose.orientation.x = quat[0]
-        state.pose.orientation.y = quat[1]
-        state.pose.orientation.z = quat[2]
-        state.pose.orientation.w = quat[3]
-        state.twist.linear.x = 0.0
-        state.twist.linear.y = 0.0
-        state.twist.linear.z = 0.0
-        state.twist.angular.x = 0.0
-        state.twist.angular.y = 0.0
-        state.twist.angular.z = 0.0
-        state.reference_frame = "world"
+        self.cmd_pub.publish(Twist())  # 速度を 0 にする
 
         try:
-            set_model_state(state)
-            rospy.loginfo("Robot reset to initial position and zero velocity.")
-        except rospy.ServiceException as e:
+            self.gz.set_pose(self.robot_model_name,
+                             x=x_pos, y=y_pos, z=z_pos, yaw=yaw)
+            rospy.loginfo("Robot reset to initial position.")
+        except Exception as e:
             rospy.logerr(f"Failed to reset robot model: {e}")
 
         # Wait for sensors to update
@@ -1206,36 +1216,14 @@ class GazeboEnv(Env):
 
     def step(self, action):
 
-        def is_gazebo_paused():
-            rospy.wait_for_service('/gazebo/get_physics_properties')
-            try:
-                get_physics = rospy.ServiceProxy('/gazebo/get_physics_properties', GetPhysicsProperties)
-                physics = get_physics()
-                return physics.pause  # True if paused, False if running
-            except rospy.ServiceException as e:
-                rospy.logerr(f"Service call failed: {e}")
-                return None
-
-        def pause_gazebo():
-            rospy.wait_for_service('/gazebo/pause_physics')
-            pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
-            pause()
-            # rospy.loginfo("Simulation paused")
-
-        def unpause_gazebo():
-            rospy.wait_for_service('/gazebo/unpause_physics')
-            unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
-            unpause()
-            # rospy.loginfo("Simulation running")
-
-        paused = is_gazebo_paused()
-        if paused is None:
-            print("Could not determine Gazebo state.")
-        elif paused:
-            # print("Gazebo is currently PAUSED.")
-            unpause_gazebo()
-        else:
-            print("Gazebo is currently RUNNING.")
+        # Classic は毎 step で /gazebo/get_physics_properties を呼んで一時停止
+        # 状態を確認し、止まっていれば unpause していた。Harmonic に状態取得の
+        # サービスはないので、常に unpause を送る。
+        #
+        # なお毎 step サービスを叩くのは無駄なので、本来は reset の時だけで
+        # 足りる。元の実装を踏襲して残しているが、学習速度が問題になるなら
+        # ここは削れる。
+        self.gz.unpause()
 
         """Apply action and return (obs, reward, done, truncated, info)."""
         if self.current_pose is None or self.current_image is None:
@@ -1380,8 +1368,8 @@ class GazeboEnv(Env):
 if __name__ == "__main__":
     rospy.init_node("gazebo_env")
 
-    env = GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv")
-    # env = GazeboEnv("/home/icon-group/catkin_ws/src/aws-robomaker-hospital-world/src/path_points.csv")
+    env = GazeboEnv()
+    # env = GazeboEnv()
    
     obs, info = env.reset()
     # while(1):

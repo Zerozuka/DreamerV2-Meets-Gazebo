@@ -13,8 +13,14 @@ def data_files_in(*dirs):
     """
     entries = []
     for d in dirs:
-        for root, _, files in os.walk(d):
-            paths = [os.path.join(root, f) for f in files]
+        for root, subdirs, files in os.walk(d):
+            # __pycache__ は install 対象にしない。スクリプトをその場で実行すると
+            # 生成され、--symlink-install で
+            #   error: [Errno 17] File exists: .../__pycache__/*.pyc
+            # となってビルドが落ちる。
+            subdirs[:] = [s for s in subdirs if s != '__pycache__']
+            paths = [os.path.join(root, f) for f in files
+                     if not f.endswith(('.pyc', '.pyo'))]
             if paths:
                 entries.append((os.path.join('share', package_name, root), paths))
     return entries

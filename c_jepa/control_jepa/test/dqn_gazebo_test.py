@@ -18,12 +18,13 @@ import os
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from rosgraph_msgs.msg import Clock
+from paths import output_path
 
 
 
-csv_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/predicted_power_log.csv"
+csv_path = output_path("predicted_power_log.csv")
 case_id = "case_8/"
-output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/baseline_dqn/" + case_id
+output_dir = output_path("baseline_dqn") + case_id
 _video_writers = {} 
 last_completed = None
 current_image = None
@@ -313,7 +314,7 @@ if __name__ == "__main__":
 
     MODEL_PATH = "training/gazebo/gazebo_step_230000.pt"    #gazebo_step_50000 gazebo_best
 
-    env = ImageEnv(GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv"))
+    env = ImageEnv(GazeboEnv())
 
     state_dim = (4, 84, 84)
     action_dim = env.action_space.n

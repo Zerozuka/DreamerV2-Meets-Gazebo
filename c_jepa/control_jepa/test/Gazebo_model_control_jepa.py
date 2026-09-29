@@ -20,6 +20,7 @@ import pandas as pd
 from nav_msgs.msg import Odometry
 from threading import Lock
 from wutils.models import Encoder, Predictor, PowerPredictor 
+from paths import model_path
 
 
 class OdomPoseListener:
@@ -236,9 +237,9 @@ if __name__ == "__main__":
 
     device = "cpu"
     # model_path = "path/to/saved_model.pth"
-    model_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/results/CarRacing-v2_0_pomdp/7_nov_Gazebo/models_best_4.pth"  #31_oct_gym  7_nov_Gazebo
+    model_path = model_path("results", "CarRacing-v2_0_pomdp", "7_nov_Gazebo", "models_best_4.pth")  #31_oct_gym  7_nov_Gazebo
   
-    env = GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv")
+    env = GazeboEnv()
 
     env = ImageEnv(env, skip_frames=3, stack_frames=4, initial_no_op=5)
     env = OneHotAction(env)

@@ -26,11 +26,12 @@ from sensor_msgs.msg import Image
 from rosgraph_msgs.msg import Clock
 from numpy.linalg import norm
 import torch.nn.functional as F
+from paths import model_path, output_path
 
 
-csv_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/predicted_power_log.csv"
+csv_path = output_path("predicted_power_log.csv")
 case_id = "case_0/"
-output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/Proposed/" + case_id
+output_dir = output_path("Proposed") + case_id
 datapath = output_dir + "proposed_results.pt"
 datapath_2 = output_dir + "z_val_.pt"
 _video_writers = {} 
@@ -917,9 +918,9 @@ if __name__ == "__main__":
 
     device = "cpu"
     # model_path = "path/to/saved_model.pth"
-    model_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/results/CarRacing-v2_0_pomdp/20_dec_gazebo/models_best_8.pth"  #31_oct_gym  7_nov_Gazebo
-    wmodel_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/wireless_models/3_bs/wi-jepa_"
-    env = GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv")
+    model_path = model_path("results", "CarRacing-v2_0_pomdp", "20_dec_gazebo", "models_best_8.pth")  #31_oct_gym  7_nov_Gazebo
+    wmodel_path = model_path("wireless_models", "3_bs", "wi-jepa_")
+    env = GazeboEnv()
 
     env = ImageEnv(env, skip_frames=3, stack_frames=4, initial_no_op=5)
     env = OneHotAction(env)
