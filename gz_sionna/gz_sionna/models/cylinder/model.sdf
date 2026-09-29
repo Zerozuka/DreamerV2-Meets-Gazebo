@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  復元したラッパー。メッシュは上流同梱の models/jepa_objects/cylinder.obj を
+  そのまま参照しており、ファイルは複製していない。
+
+  static を true にしている。経路上の静的障害物として置かれていると解釈した。
+  上流の意図は未確認。
+-->
+<sdf version="1.7">
+  <model name="cylinder">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://jepa_objects/cylinder.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://jepa_objects/cylinder.obj</uri>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

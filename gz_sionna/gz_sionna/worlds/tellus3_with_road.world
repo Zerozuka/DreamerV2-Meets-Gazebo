@@ -375,13 +375,17 @@
   <pose>0 0 0 0 0 0</pose>
 </include>
 
+<!-- Harmonic は同名モデルの重複を拒否する ("model with name[...] already
+     exists")。他の include (cam_front 等) と同様に <name> を与える。 -->
 <include>
   <uri>model://radio_tower_</uri>
+  <name>radio_tower_1</name>
   <pose> 26.627333 6.138611 3.308903 0 0 0</pose>
 </include>
 
 <include>
   <uri>model://radio_tower_</uri>
+  <name>radio_tower_2</name>
   <pose> 11.449739 12.156978 3.308903 0 0 0</pose>
 </include>
 
