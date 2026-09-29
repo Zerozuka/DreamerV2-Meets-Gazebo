@@ -9,7 +9,7 @@ from cv_bridge import CvBridge
 import cv2
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-import tf.transformations as tft
+import tf_transformations as tft
 from gymnasium import Env
 from gymnasium import spaces
 from std_srvs.srv import Empty
