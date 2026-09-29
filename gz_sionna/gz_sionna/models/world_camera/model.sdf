@@ -1,4 +1,24 @@
 <?xml version="1.0"?>
+<!--
+  world に固定設置する観測用カメラ。tellus3_with_road.world が cam_front /
+  cam_back / cam_left / cam_right / cam_top として 5 台 include する。
+
+  Gazebo Classic の libgazebo_ros_camera.so を削除した。Harmonic には存在せず
+  次のエラーになる。
+
+    Failed to load system plugin [libgazebo_ros_camera.so]:
+    Could not find shared library.
+
+  Harmonic では <sensor> に <topic> を書き、world 側の
+  gz::sim::systems::Sensors が描画する。ROS 2 へ出す場合は ros_gz_bridge か
+  ros_gz_image を通す。Classic 固有の robotNamespace / cameraName /
+  frameName / imageTopicName は対応する設定がないため削除した。
+
+  <topic> は include 時の <name> では上書きされないので、5 台すべてが同じ
+  トピックに publish してしまう。個別に取得したい場合はモデルを複製して
+  <topic> を変えるか、world 側の <include> 内で上書きする必要がある。
+  現状どのコードもこのカメラを購読していないため、そのままにしている。
+-->
 <sdf version="1.6">
   <model name="world_camera">
     <static>true</static>
@@ -8,6 +28,9 @@
 
       <sensor name="camera_sensor" type="camera">
         <update_rate>20</update_rate>
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+        <topic>world_cam/image_raw</topic>
 
         <camera>
           <horizontal_fov>1.3962634</horizontal_fov>
@@ -21,17 +44,6 @@
             <far>100</far>
           </clip>
         </camera>
-
-        <always_on>true</always_on>
-        <visualize>true</visualize>
-
-        <plugin name="gazebo_ros_camera" filename="libgazebo_ros_camera.so">
-          <robotNamespace/>
-          <cameraName>world_cam</cameraName>
-          <frameName>world_cam_link</frameName>
-          <imageTopicName>image_raw</imageTopicName>
-        </plugin>
-
       </sensor>
     </link>
   </model>

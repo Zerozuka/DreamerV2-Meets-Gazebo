@@ -421,17 +421,23 @@
   <pose> 11.449739 12.156978 3.308903 0 0 0</pose>
 </include>
 
-<include>
+<!-- cross_line と receiver_1..3 のモデルは未入手のためコメントアウトしている。
+     Harmonic では解決できない <include> があると SDF のパースがそこで止まり、
+     world 全体が読み込めなくなる (初期化に到達しない)。著者から受領したら
+     models/ に置いてコメントを外す。pose はそのまま残してある。 -->
+
+<!-- <include>
   <uri>model://cross_line</uri>
   <pose>0 0 0 0 0 0</pose>
-</include>
+</include> -->
 
 <include>
 <uri>model://race_end</uri>
+<name>race_end</name>
 <pose>0 0 0 0 0 0</pose>
 </include>
 
-<include>
+<!-- <include>
 <uri>model://receiver_1</uri>
 <pose>  8.238358 12.161644  3.568326 1.421040 0 0</pose>
 </include>
@@ -444,7 +450,7 @@
 <include>
 <uri>model://receiver_3</uri>
 <pose> -9.805386 12.161644  3.568326  1.421040 0 0 </pose>
-</include>
+</include> -->
  <!-- 8.238777 -5.601792 3.077197 -1.528551 0 0
   -4.008763 0.092765 3.274808 0 0 0 -->
 
