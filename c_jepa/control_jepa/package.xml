@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>gz_sionna</name>
+  <name>control_jepa</name>
   <version>0.0.0</version>
-  <description>Gazebo と Sionna RT を同期させるノードと、対応する world・モデル資産</description>
+  <description>Control-JEPA。Gazebo の観測とロボット動力学から制御表現を学習する</description>
 
   <maintainer email="icon-group@todo.todo">icon-group</maintainer>
 
@@ -14,16 +14,17 @@
   <exec_depend>rclpy</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
 
-  <!-- Gazebo Harmonic 連携 -->
-  <exec_depend>ros_gz_sim</exec_depend>
-  <exec_depend>ros_gz_bridge</exec_depend>
-  <exec_depend>ros_gz_image</exec_depend>
+  <!-- gazebo_msgs はあえて宣言していない。gazebo_env.py が現在使っている
+       /gazebo/set_model_state などの Classic 固有サービスは Harmonic に
+       存在せず、gz-transport への移行で依存ごと消えるため。 -->
 
-  <exec_depend>xacro</exec_depend>
-  <exec_depend>robot_state_publisher</exec_depend>
-  <exec_depend>jetbot_world</exec_depend>
+  <!-- torch, gymnasium は rosdep のキーがないため package.xml に書けない。
+       requirements 側で管理する (依存刷新の issue を参照)。 -->
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
