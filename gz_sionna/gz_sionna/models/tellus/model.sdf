@@ -1,0 +1,26 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="tellus">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://tellus/meshes/tellus.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <!-- 視覚と同じ 14 MB のメッシュを衝突形状にも使っている (上流のまま)。
+           物理演算では重いので、Spot を歩かせる段階で簡略形状に置き換える
+           ことを検討する。上流には TELLUS_arena_.stl (3.5 MB) もあり、
+           衝突用として使えるかもしれない。 -->
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://tellus/meshes/tellus.dae</uri>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>
