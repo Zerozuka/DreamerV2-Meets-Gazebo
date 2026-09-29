@@ -1,187 +1,29 @@
 <?xml version="1.0"?>
-<robot name="turtlebot3_burger_sim" xmlns:xacro="http://ros.org/wiki/xacro">
-  <xacro:arg name="laser_visual" default="false" />
+<!--
+  Gazebo Harmonic (gz-sim 8) 向けの拡張。
+
+  Gazebo Classic 版からの主な変更:
+
+  - libgazebo_ros_diff_drive.so       -> gz::sim::systems::DiffDrive
+  - libgazebo_ros_imu.so              -> <sensor type="imu"> + world 側の Imu システム
+  - libgazebo_ros_laser.so            -> <sensor type="gpu_lidar"> + world 側の Sensors システム
+  - libgazebo_ros_camera.so           -> <sensor type="camera"> + world 側の Sensors システム
+  - <material>Gazebo/Green</material> -> 削除。jetbot_real.urdf.xacro 側が
+                                         <color rgba> を持っており、sdformat の
+                                         URDF パーサがそれを SDF の <material> に
+                                         変換するため、指定しなくても色は残る
+
+  センサ値は gz-transport に出るので、ROS 2 側へは ros_gz_bridge を通す。
+  トピック名は Python 側 (gazebo_env.py) が購読している cmd_vel / odom /
+  image_raw2 に合わせてあるので、bridge を同名で張れば Python 側は無改修で動く。
+-->
+<robot name="jetbot_real_sim" xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:arg name="laser_visual" default="false"/>
   <xacro:arg name="imu_visual"   default="false"/>
 
-  <gazebo reference="base_link">
-    <material>Gazebo/Green</material>
-  </gazebo>
-
-   <gazebo reference="wheel_left_rim">
-    <material>Gazebo/SkyBlue</material>
-  </gazebo>
-
-   <gazebo reference="wheel_right_rim">
-    <material>Gazebo/SkyBlue</material>
-  </gazebo>
- 
-  <gazebo reference="wheel_left_tire">
-    <material>Gazebo/FlatBlack</material>
-     <!-- <material>Gazebo/Red</material> -->
-  </gazebo>
-
-   <gazebo reference="wheel_right_tire">
-    <material>Gazebo/FlatBlack</material>
-    <!-- <material>Gazebo/Red</material> -->
-  </gazebo>
-
-  <gazebo reference="left_motor_link">
-    <material>Gazebo/Grey</material>
-  </gazebo>
-
-  <gazebo reference="right_motor_link">
-    <material>Gazebo/Grey</material>
-  </gazebo>
-
-  <gazebo reference="antenna_link">
-    <material>Gazebo/FlatBlack</material>
-  </gazebo>
-  
-  <gazebo reference="upper_plate_link">
-    <material>Gazebo/Black</material>
-  </gazebo>
-
-  <gazebo reference="nano_link">
-    <material>Gazebo/Black</material>
-  </gazebo>
-
-  <gazebo reference="bolt1_link">
-    <material>Gazebo/Yellow</material>
-  </gazebo>
-
-  <gazebo reference="bolt2_link">
-    <material>Gazebo/Black</material>
-  </gazebo>
-
-  <gazebo reference="camera_mount_link">
-    <material>Gazebo/Blue</material>
-  </gazebo>
-
-  <gazebo reference="camera_link">
-    <material>Gazebo/Grey</material>
-  </gazebo>
-  <!--base_scan-->
-  <!-- <gazebo reference="base_scan">
-    <sensor type="camera" name="camera1">
-      <update_rate>30.0</update_rate>
-      <camera name="head">
-        <horizontal_fov>1.6</horizontal_fov>
-        <image>
-          <width>640</width>
-          <height>480</height>
-          <format>R8G8B8</format>
-        </image>
-        <clip>
-          <near>0.14</near>
-          <far>300</far>
-        </clip>
-        <noise>
-          <type>gaussian</type>
-          
-          <mean>0.0</mean>
-          <stddev>0.007</stddev>
-        </noise>
-      </camera>
-      <plugin name="camera_controller" filename="libgazebo_ros_camera.so">
-        <alwaysOn>true</alwaysOn>
-        <updateRate>0.0</updateRate>
-       
-        <imageTopicName>image_raw</imageTopicName>
-        <cameraInfoTopicName>camera_info</cameraInfoTopicName>
-        <frameName>camera_link</frameName>
-        <hackBaseline>0.07</hackBaseline>
-        <distortionK1>0.0</distortionK1>
-        <distortionK2>0.0</distortionK2>
-        <distortionK3>0.0</distortionK3>
-        <distortionT1>0.0</distortionT1>
-        <distortionT2>0.0</distortionT2>
-      </plugin>
-    </sensor>
-  </gazebo>  -->
-
-
-    <!-- <gazebo reference="camera2_link">
-    <sensor type="camera" name="camera2">
-      <update_rate>30.0</update_rate>
-      <camera name="head">
-        <horizontal_fov>1.6</horizontal_fov>
-        <image>
-          <width>640</width>
-          <height>480</height>
-          <format>R8G8B8</format>
-        </image>
-        <clip>
-          <near>0.14</near>
-          <far>300</far>
-        </clip>
-        <noise>
-          <type>gaussian</type>
-          
-          <mean>0.0</mean>
-          <stddev>0.007</stddev>
-        </noise>
-      </camera>
-      <plugin name="camera_controller" filename="libgazebo_ros_camera.so">
-        <alwaysOn>true</alwaysOn>
-        <updateRate>0.0</updateRate>
-       
-        <imageTopicName>image_raw2</imageTopicName>
-        <cameraInfoTopicName>camera_info</cameraInfoTopicName>
-        <frameName>camera_link</frameName>
-        <hackBaseline>0.07</hackBaseline>
-        <distortionK1>0.0</distortionK1>
-        <distortionK2>0.0</distortionK2>
-        <distortionK3>0.0</distortionK3>
-        <distortionT1>0.0</distortionT1>
-        <distortionT2>0.0</distortionT2>
-      </plugin>
-    </sensor>
-  </gazebo>  -->
-
-  <gazebo reference="camera2_link">
-  <sensor type="camera" name="camera2">
-    <update_rate>30.0</update_rate>
-
-    <camera name="main_camera">
-      <horizontal_fov>2.83</horizontal_fov> 
-      
-      <image>
-        <width>640</width>
-        <height>480</height>
-        <format>R8G8B8</format>
-      </image>
-
-      <clip>
-        <near>0.05</near>
-        <far>100.0</far>
-      </clip>
-
-      <noise>
-        <type>gaussian</type>
-        <mean>0.0</mean>
-        <stddev>0.001</stddev>
-      </noise>
-    </camera>
-
-    <plugin name="camera_controller" filename="libgazebo_ros_camera.so">
-      <alwaysOn>true</alwaysOn>
-      <updateRate>30.0</updateRate>
-
-      <imageTopicName>image_raw2</imageTopicName>
-      <cameraInfoTopicName>camera_info</cameraInfoTopicName>
-      <frameName>camera2_link</frameName>
-      <hackBaseline>0.0</hackBaseline>
-
-      <distortionK1>0.25</distortionK1>
-      <distortionK2>0.15</distortionK2>
-      <distortionK3>0.0</distortionK3>
-      <distortionT1>0.0</distortionT1>
-      <distortionT2>0.0</distortionT2>
-    </plugin>
-  </sensor>
-</gazebo>
-
-
+  <!-- ===================== 接触パラメータ ===================== -->
+  <!-- mu1 / mu2 / kp / kd は sdformat の URDF パーサが
+       <surface><friction> と <contact> に変換するため、Harmonic でも有効。 -->
 
   <gazebo reference="wheel_left_link">
     <mu1>0.1</mu1>
@@ -191,7 +33,6 @@
     <minDepth>0.001</minDepth>
     <maxVel>0.1</maxVel>
     <fdir1>1 0 0</fdir1>
-    <material>Gazebo/Yellow</material>
   </gazebo>
 
   <gazebo reference="wheel_right_link">
@@ -202,7 +43,6 @@
     <minDepth>0.001</minDepth>
     <maxVel>0.1</maxVel>
     <fdir1>1 0 0</fdir1>
-    <material>Gazebo/Yellow</material>
   </gazebo>
 
   <gazebo reference="caster_back_link">
@@ -212,7 +52,6 @@
     <kd>100.0</kd>
     <minDepth>0.001</minDepth>
     <maxVel>1.0</maxVel>
-    <material>Gazebo/Grey</material>
   </gazebo>
 
   <gazebo reference="caster_front_link">
@@ -222,80 +61,134 @@
     <kd>100.0</kd>
     <minDepth>0.001</minDepth>
     <maxVel>1.0</maxVel>
-    <material>Gazebo/Grey</material>
   </gazebo>
 
-  <gazebo reference="imu_link">
-    <sensor type="imu" name="imu">
-      <always_on>true</always_on>
-      <visualize>$(arg imu_visual)</visualize>
-    </sensor>
-    <material>Gazebo/FlatBlack</material>
-  </gazebo>
+  <!-- ===================== 差動二輪駆動 ===================== -->
+  <!--
+    Classic の libgazebo_ros_diff_drive.so からの対応:
 
+      commandTopic    -> topic
+      odometryTopic   -> odom_topic
+      odometryFrame   -> odom_frame
+      robotBaseFrame  -> child_frame_id
+      wheelSeparation -> wheel_separation
+      wheelDiameter   -> wheel_radius   ★直径ではなく半径。0.066 -> 0.033
+      leftJoint       -> left_joint
+      rightJoint      -> right_joint
+
+    publishWheelTF / legacyMode / rosDebugLevel / odometrySource /
+    publishWheelJointState は Harmonic に対応する設定がないので削除した。
+    車輪の関節状態は下の JointStatePublisher が出す。
+
+    wheel_separation は URDF の車輪取り付け位置から 0.0796 * 2 = 0.1592 m。
+    Classic 版は 0.160 と書かれていたので実測値に合わせた。
+  -->
   <gazebo>
-    <plugin name="turtlebot3_burger_controller" filename="libgazebo_ros_diff_drive.so">
-      <commandTopic>cmd_vel</commandTopic>
-      <odometryTopic>odom</odometryTopic>
-      <odometryFrame>$(arg botname)/odom</odometryFrame>
-      <odometrySource>world</odometrySource>
-      <publishOdomTF>true</publishOdomTF>
-      <robotBaseFrame>$(arg botname)/base_footprint</robotBaseFrame>
-      <publishWheelTF>false</publishWheelTF>
-      <publishTf>true</publishTf>
-      <publishWheelJointState>true</publishWheelJointState>
-      <legacyMode>false</legacyMode>
-      <updateRate>30</updateRate>
-      <leftJoint>wheel_left_joint</leftJoint>
-      <rightJoint>wheel_right_joint</rightJoint>
-      <wheelSeparation>0.160</wheelSeparation>
-      <wheelDiameter>0.066</wheelDiameter>
-      <wheelAcceleration>1</wheelAcceleration>
-      <wheelTorque>10</wheelTorque>
-      <rosDebugLevel>na</rosDebugLevel>
+    <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+      <left_joint>wheel_left_joint</left_joint>
+      <right_joint>wheel_right_joint</right_joint>
+      <wheel_separation>0.1592</wheel_separation>
+      <wheel_radius>0.033</wheel_radius>
+      <max_linear_acceleration>1.0</max_linear_acceleration>
+      <topic>cmd_vel</topic>
+      <odom_topic>odom</odom_topic>
+      <tf_topic>tf</tf_topic>
+      <frame_id>$(arg botname)/odom</frame_id>
+      <child_frame_id>$(arg botname)/base_footprint</child_frame_id>
+      <odom_publish_frequency>30</odom_publish_frequency>
+    </plugin>
+
+    <!-- 車輪を含む全関節の状態を /joint_states 相当に出す。
+         Classic の publishWheelJointState の代わり。 -->
+    <plugin filename="gz-sim-joint-state-publisher-system"
+            name="gz::sim::systems::JointStatePublisher">
+      <topic>joint_states</topic>
     </plugin>
   </gazebo>
 
-  <gazebo>
-    <plugin name="imu_plugin" filename="libgazebo_ros_imu.so">
-      <alwaysOn>true</alwaysOn>
-      <bodyName>imu_link</bodyName>
-      <frameName>imu_link</frameName>
-      <topicName>imu</topicName>
-      <serviceName>imu_service</serviceName>
-      <gaussianNoise>0.0</gaussianNoise>
-      <updateRate>0</updateRate>
+  <!-- ===================== IMU ===================== -->
+  <!-- Classic の libgazebo_ros_imu.so は削除。Harmonic では <sensor type="imu">
+       を置き、world 側の gz::sim::systems::Imu が処理する。
+       ノイズ指定は Classic 版の値をそのまま移した。 -->
+  <gazebo reference="imu_link">
+    <sensor name="imu" type="imu">
+      <always_on>true</always_on>
+      <update_rate>30</update_rate>
+      <visualize>$(arg imu_visual)</visualize>
+      <topic>imu</topic>
       <imu>
+        <angular_velocity>
+          <x><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev>
+             <bias_mean>0.0000075</bias_mean><bias_stddev>0.0000008</bias_stddev></noise></x>
+          <y><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev>
+             <bias_mean>0.0000075</bias_mean><bias_stddev>0.0000008</bias_stddev></noise></y>
+          <z><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev>
+             <bias_mean>0.0000075</bias_mean><bias_stddev>0.0000008</bias_stddev></noise></z>
+        </angular_velocity>
+        <linear_acceleration>
+          <x><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev>
+             <bias_mean>0.1</bias_mean><bias_stddev>0.001</bias_stddev></noise></x>
+          <y><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev>
+             <bias_mean>0.1</bias_mean><bias_stddev>0.001</bias_stddev></noise></y>
+          <z><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev>
+             <bias_mean>0.1</bias_mean><bias_stddev>0.001</bias_stddev></noise></z>
+        </linear_acceleration>
+      </imu>
+    </sensor>
+  </gazebo>
+
+  <!-- ===================== メインカメラ ===================== -->
+  <!--
+    C-JEPA の観測はこのカメラから取る。gazebo_env.py が image_raw2 を
+    購読しているので、トピック名を合わせてある。
+
+    Classic の libgazebo_ros_camera.so 固有の設定 (imageTopicName,
+    cameraInfoTopicName, frameName, hackBaseline, distortionK1..T2,
+    alwaysOn, updateRate) は Harmonic では使わない。トピックは <topic>、
+    座標系はリンク名から決まる。レンズ歪みが必要なら SDF の
+    <lens><type>custom</type> で別途表現する。
+  -->
+  <gazebo reference="camera2_link">
+    <sensor name="camera2" type="camera">
+      <always_on>true</always_on>
+      <update_rate>30.0</update_rate>
+      <visualize>false</visualize>
+      <topic>image_raw2</topic>
+      <camera name="main_camera">
+        <horizontal_fov>2.83</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.05</near>
+          <far>100.0</far>
+        </clip>
         <noise>
           <type>gaussian</type>
-          <rate>
-            <mean>0.0</mean>
-            <stddev>2e-4</stddev>
-            <bias_mean>0.0000075</bias_mean>
-            <bias_stddev>0.0000008</bias_stddev>
-          </rate>
-          <accel>
-            <mean>0.0</mean>
-            <stddev>1.7e-2</stddev>
-            <bias_mean>0.1</bias_mean>
-            <bias_stddev>0.001</bias_stddev>
-          </accel>
+          <mean>0.0</mean>
+          <stddev>0.001</stddev>
         </noise>
-      </imu>
-    </plugin>
+      </camera>
+    </sensor>
   </gazebo>
 
+  <!-- ===================== LiDAR ===================== -->
+  <!-- Classic の ray + libgazebo_ros_laser.so を gpu_lidar に置き換えた。
+       走査パラメータは Classic 版の値をそのまま移している。 -->
   <gazebo reference="base_scan">
-    <material>Gazebo/FlatBlack</material>
-    <sensor type="ray" name="lds_lfcd_sensor">
+    <sensor name="lds_lfcd_sensor" type="gpu_lidar">
       <pose>0 0 0 0 0 0</pose>
-      <visualize>$(arg laser_visual)</visualize>
+      <always_on>true</always_on>
       <update_rate>5</update_rate>
-      <ray>
+      <visualize>$(arg laser_visual)</visualize>
+      <topic>scan</topic>
+      <lidar>
         <scan>
           <horizontal>
             <samples>1147</samples>
-            <resolution>0.31386224934</resolution>
+            <resolution>1</resolution>
             <min_angle>0.0</min_angle>
             <max_angle>6.28319</max_angle>
           </horizontal>
@@ -310,55 +203,8 @@
           <mean>0.0</mean>
           <stddev>0.01</stddev>
         </noise>
-      </ray>
-      <plugin name="gazebo_ros_lds_lfcd_controller" filename="libgazebo_ros_laser.so">
-        <topicName>scan</topicName>
-        <frameName>$(arg botname)/base_scan</frameName>
-      </plugin>
+      </lidar>
     </sensor>
   </gazebo>
-
-      <!-- <gazebo reference="base_scan">
-      <material>Gazebo/FlatBlack</material>
-      <sensor type="ray" name="velodyne-VLP16">
-        <pose>0 0 1 0 0 0</pose>
-        <visualize>false</visualize>
-        <update_rate>10</update_rate>
-        <ray>
-          <scan>
-            <horizontal>
-              <samples>1875</samples>
-              <resolution>1</resolution>
-              <min_angle>-3.1415926535897931</min_angle>
-              <max_angle>3.1415926535897931</max_angle>
-            </horizontal>
-            <vertical>
-              <samples>16</samples>
-              <resolution>1</resolution>
-              <min_angle>-0.261799</min_angle> 
-              <max_angle>0.261799</max_angle> 
-            </vertical>
-          </scan>
-          <range>
-            <min>0.3</min>
-            <max>131.0</max>
-            <resolution>0.001</resolution>
-          </range>
-          <noise>
-            <type>gaussian</type>
-            <mean>0.0</mean>
-            <stddev>0.008</stddev>
-          </noise>
-        </ray>
-        <plugin name="gazebo_ros_laser_controller" filename="libgazebo_ros_velodyne_laser.so">
-          <topicName>velodyne_points</topicName>
-          <frameName>base_scan</frameName>
-          <organize_cloud>false</organize_cloud>
-          <min_range>0.9</min_range>
-          <max_range>130.0</max_range>
-          <gaussianNoise>0.008</gaussianNoise>
-        </plugin>
-      </sensor>
-    </gazebo> -->
 
 </robot>

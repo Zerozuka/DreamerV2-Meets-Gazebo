@@ -14,6 +14,36 @@
       <real_time_factor>1</real_time_factor>
       <real_time_update_rate>1000</real_time_update_rate>
     </physics>
+
+    <!-- ===================== gz-sim システムプラグイン =====================
+      Gazebo Classic では暗黙に有効だった機能が、Harmonic では world 内で
+      明示的に読み込む必要がある。
+
+      Physics          物理演算そのもの
+      UserCommands     /world/default/set_pose や spawn/delete を提供する。
+                       gazebo_env.py のエピソード reset が使う
+                       (Classic の /gazebo/set_model_state に相当)
+      SceneBroadcaster GUI とクライアントへ状態を配信し、
+                       /world/default/control を提供する
+                       (Classic の /gazebo/pause_physics に相当)
+      Sensors          カメラと LiDAR の描画。これが無いと
+                       jetbot_real.gazebo.xacro の camera2 / lds_lfcd_sensor が
+                       何も出さない
+      Imu              IMU センサの処理
+    -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu"/>
+
     <scene>
       <ambient>1 1 1 1</ambient> <!-- <ambient>0.4 0.4 0.4 1</ambient> -->
       <background>0.7 0.7 0.7 1</background>
@@ -84,11 +114,13 @@
               <size>100 100</size>
             </plane>
           </geometry>
+          <!-- Ogre material script (Gazebo/Grey) は Classic のインストール先に
+               依存しており Harmonic では解決できないため、SDF の PBR 指定に
+               置き換えた。色は Gazebo/Grey 相当。 -->
           <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/Grey</name>
-            </script>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
           </material>
         </visual>
         <self_collide>0</self_collide>

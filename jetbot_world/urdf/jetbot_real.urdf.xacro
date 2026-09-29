@@ -67,7 +67,15 @@
     <parent link="base_link"/>
     <child link="wheel_right_link"/>
     <axis xyz="0 0 1"/>
-    <limit effort="0" lower="0" upper="0" velocity="0"/>
+    <!-- SolidWorks エクスポータが effort="0" velocity="0" を出力していた。
+         Gazebo Classic の libgazebo_ros_diff_drive は limit を無視して車輪速度を
+         直接与えていたため実害がなかったが、gz-sim の DiffDrive は limit を
+         尊重するので、0 のままだとトルク上限 0 で車輪が回らない。
+
+         effort は Classic 版プラグインの wheelTorque 10 に合わせた。
+         velocity は gazebo_env.py の max_linear_speed=1.0 [m/s] と
+         車輪半径 0.033 [m] から 1.0 / 0.033 = 30.3 [rad/s] とした。 -->
+    <limit effort="10" velocity="30.3"/>
   </joint>
   <link name="wheel_right_rim">
     <inertial>
@@ -152,7 +160,8 @@
     <parent link="base_link"/>
     <child link="wheel_left_link"/>
     <axis xyz="0 0 1"/>
-    <limit effort="0" lower="0" upper="0" velocity="0"/>
+    <!-- wheel_right_joint と同じ理由で effort / velocity を 0 から変更した。 -->
+    <limit effort="10" velocity="30.3"/>
   </joint>
   <link name="wheel_left_rim">
     <inertial>
