@@ -29,9 +29,10 @@ def data_files_in(*dirs):
 setup(
     name=package_name,
     version='0.0.0',
-    # Python モジュールは持たない。src/killer.py は Gazebo Classic の
-    # gzserver/gzclient を kill するスクリプトで、Harmonic 移行 (#4, #6) で
-    # 役目がなくなるため、ここでは登録しない。
+    # Python モジュールは持たない。このパッケージは URDF・メッシュ・world の
+    # リソース置き場である。もとあった src/killer.py は Gazebo Classic の
+    # gzserver/gzclient を kill するスクリプトで、Harmonic には該当プロセスが
+    # ないため削除した。
     packages=[],
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),

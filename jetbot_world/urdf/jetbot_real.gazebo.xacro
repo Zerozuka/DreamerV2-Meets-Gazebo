@@ -91,11 +91,34 @@
       <wheel_radius>0.033</wheel_radius>
       <max_linear_acceleration>1.0</max_linear_acceleration>
       <topic>cmd_vel</topic>
-      <odom_topic>odom</odom_topic>
+      <!-- DiffDrive の odom は車輪エンコーダの積分なので spawn 位置からの
+           相対値になる。ワールド座標が必要なので /odom は下の
+           OdometryPublisher に任せ、こちらは別トピックに逃がす。 -->
+      <odom_topic>wheel_odom</odom_topic>
       <tf_topic>tf</tf_topic>
       <frame_id>$(arg botname)/odom</frame_id>
       <child_frame_id>$(arg botname)/base_footprint</child_frame_id>
       <odom_publish_frequency>30</odom_publish_frequency>
+    </plugin>
+
+    <!-- Classic の libgazebo_ros_diff_drive にあった
+         <odometrySource>world</odometrySource> の代替。
+
+         gz-sim の DiffDrive は車輪積分のみで、ワールド座標を出す設定がない。
+         一方 gazebo_env.py は /odom の値をコースとの照合に使っており
+         (_find_nearest_point で max_deviation=0.5 m と比較)、相対値のままだと
+         常に「経路外」と判定されて毎 step reward=-100 / truncated=True になる。
+
+         OdometryPublisher はモデルのワールド姿勢から odometry を作るので、
+         Classic の odometrySource=world と同じ意味になる。 -->
+    <plugin filename="gz-sim-odometry-publisher-system"
+            name="gz::sim::systems::OdometryPublisher">
+      <odom_frame>$(arg botname)/odom</odom_frame>
+      <robot_base_frame>$(arg botname)/base_footprint</robot_base_frame>
+      <odom_topic>odom</odom_topic>
+      <odom_publish_frequency>30</odom_publish_frequency>
+      <!-- 差動二輪なので 2 次元 (x, y, yaw) で十分。 -->
+      <dimensions>2</dimensions>
     </plugin>
 
     <!-- 車輪を含む全関節の状態を /joint_states 相当に出す。
