@@ -201,20 +201,13 @@ def main():
            
 
 
-        # Sionna 2.x では cir_to_ofdm_channel が torch テンソルを要求する
-        # (PHY が PyTorch 化されたため)。out_type="numpy" のままだと
+        # Sionna 2.x では cir_to_ofdm_channel が torch テンソルとバッチ次元を
+        # 要求する (PHY が PyTorch 化されたため)。out_type="numpy" のままだと
         #   AttributeError: 'numpy.ndarray' object has no attribute 'dim'
-        # で落ちる。バッチ次元は下の reshape で足しているのでここでは型だけ。
-        a, tau = paths.cir(normalize_delays=True, out_type="torch")
-        print("Shape of a: ", a.shape)
-        print("Shape of tau: ", tau.shape)
+        # で落ちる。型合わせとバッチ次元の追加は sionna_compat に寄せている。
+        a, tau = _sionna_compat.cir_for_ofdm(paths, normalize_delays=True)
         # t = tau.reshape(-1) / 1e-9          # ns
         # a_abs = np.abs(a).reshape(-1)
-        
-
-        a = a.reshape(1, *a.shape)
-        tau = tau.reshape(1, *tau.shape)
-
 
         print("Shape of a: ", a.shape)
         print("Shape of tau: ", tau.shape)

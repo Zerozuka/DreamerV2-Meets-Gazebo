@@ -124,14 +124,20 @@ a, tau = paths.cir(normalize_delays=True, out_type="numpy")
 # Shape: [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths, num_time_steps]
 print("Shape of a: ", a.shape)
 
-# Shape: [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths]
+# Sionna 1.x では [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths] だったが、
+# 2.x では合成アレイ前提になり [num_rx, num_tx, num_paths] の 3 次元になった。
+# Shape: [num_rx, num_tx, num_paths]
 print("Shape of tau: ", tau.shape)
 
 
 # In[66]:
 
 
-t = tau[0,0,0,0,:]/1e-9 # Scale to ns
+# tau は 3 次元なので tau[0,0,0,0,:] は
+#   IndexError: too many indices for array: array is 3-dimensional, but 5 were indexed
+# になる。a は (num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths, num_time_steps)
+# の 6 次元のままなので下の添字は変えていない。
+t = tau[0,0,:]/1e-9 # Scale to ns
 a_abs = np.abs(a)[0,0,0,0,:,0]
 a_max = np.max(a_abs)
 

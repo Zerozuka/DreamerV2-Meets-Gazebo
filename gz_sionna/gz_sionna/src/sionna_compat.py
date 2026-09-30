@@ -105,14 +105,3 @@ def cir_for_ofdm(paths, **kwargs):
     #     -> [1, ...]
     #   tau: [num_rx,num_tx,num_paths] -> [1, ...]
     return a.unsqueeze(0), tau.unsqueeze(0)
-
-
-def to_numpy(x):
-    """torch テンソルでも numpy 配列でも numpy 配列にして返す。
-
-    2.x で PHY の戻り値が torch になったため、既存コードの .numpy() 呼び出しを
-    置き換えるのに使う。detach を挟むので勾配を持つテンソルでも落ちない。
-    """
-    if hasattr(x, "detach"):
-        return x.detach().cpu().numpy()
-    return x
