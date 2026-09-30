@@ -1,4 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+
+# Sionna RT 2.x は import 時に mitsuba の variant を cuda_ad_mono_polarized に
+# 決めるが、OptiX のライブラリ (libnvoptix.so.1) が無い環境では load_scene() が
+# "Could not initialize OptiX!" で落ちる。sionna.rt より前にバックエンドを
+# 選んでおく (OptiX が使えなければ LLVM にフォールバックする)。
+import sionna_compat as _sionna_compat
+_sionna_compat.select_backend()
 
 import sionna.rt
 import os
