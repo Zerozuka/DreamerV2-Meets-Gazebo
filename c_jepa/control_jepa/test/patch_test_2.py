@@ -14,7 +14,6 @@ from dreamerv2.models.pixel import ObsDecoder, ObsEncoder
 import csv
 from gazebo_env import GazeboEnv
 from gazebo_wrappers import ImageEnv, OneHotAction
-from cv_bridge import CvBridge
 import time
 from dreamerv2.training.config_ import RacingCarConfig
 from tqdm.auto import tqdm

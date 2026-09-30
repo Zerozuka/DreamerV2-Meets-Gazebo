@@ -20,7 +20,9 @@
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
-  <exec_depend>cv_bridge</exec_depend>
+  <!-- cv_bridge はあえて宣言していない。apt の cv_bridge_boost.so が NumPy 1 で
+       コンパイルされており、sionna 2.x が要求する NumPy 2 では画像変換が落ちる。
+       同等の変換を gz_sionna/src/ros_image.py に自前で持たせて依存を外した。 -->
 
   <!-- gazebo_msgs はあえて宣言していない。gazebo_env.py が現在使っている
        /gazebo/set_model_state などの Classic 固有サービスは Harmonic に

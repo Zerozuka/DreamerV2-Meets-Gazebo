@@ -24,7 +24,17 @@ CAMERA_TOPICS を書き換える。あわせて ros_gz_bridge で ROS 側に出�
 
 import cv2
 import rclpy
-from cv_bridge import CvBridge
+# cv_bridge は使わない。apt の cv_bridge_boost.so が NumPy 1 でコンパイル
+# されており NumPy 2 (sionna 2.x が要求) では画像変換が KeyError で落ちる。
+# 同等の変換を gz_sionna/src/ros_image.py に自前で持たせた (差分は docstring)。
+#
+# gz_sionna はまだ Python モジュールを install していない (dreamerv2 / utils の
+# 名前衝突を解消するまで packages=[] のため) ので share のパスを通す。
+import os as _os
+import sys as _sys
+from ament_index_python.packages import get_package_share_directory as _share
+_sys.path.insert(0, _os.path.join(_share('gz_sionna'), 'src'))
+from ros_image import imgmsg_to_bgr8  # noqa: E402
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
@@ -39,7 +49,6 @@ class MultiCameraViewer(Node):
 
     def __init__(self):
         super().__init__("multi_camera_viewer")
-        self.bridge = CvBridge()
 
         # 画像は取りこぼしても構わないので best effort、最新フレームのみ。
         qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
@@ -52,7 +61,7 @@ class MultiCameraViewer(Node):
     def _make_callback(self, name):
         def callback(msg):
             try:
-                img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+                img = imgmsg_to_bgr8(msg)
             except Exception as e:
                 # 壊れたフレームで落ちないようにする。
                 self.get_logger().warn(f"{name}: failed to convert frame: {e}")
