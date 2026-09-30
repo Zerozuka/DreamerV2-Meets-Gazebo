@@ -1,6 +1,10 @@
 #!/usr/bin/env python3.10
 
-import rospy
+# ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
+# 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
+# 検証できないため、意味を保つ層を挟んで呼び出し側を無改修にしている。
+# 詳細は gz_sionna/src/ros1_compat.py の docstring を参照。
+import ros1_compat as rospy
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
 import sionna.rt

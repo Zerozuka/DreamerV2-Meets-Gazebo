@@ -15,7 +15,7 @@ from geometry_msgs.msg import Twist
 from gymnasium import Env, spaces
 from nav_msgs.msg import Odometry
 from rclpy.duration import Duration
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
@@ -130,11 +130,20 @@ class GazeboEnv(Env):
         # 単一スレッドで spin すると待ちループが executor をブロックして
         # 永久にデッドロックする。
         #
-        # そこで MultiThreadedExecutor を別スレッドで回し、step() / reset() は
-        # 従来どおり同期的に書けるようにしている。コールバックは executor
-        # スレッド側で走るため、_odom_callback / _image_callback が書き込む
-        # current_pose / current_image には別スレッドから触ることになる。
-        # 参照の代入だけなので GIL の範囲で安全 (部分更新は起きない)。
+        # そこで executor を別スレッドで回し、step() / reset() は従来どおり
+        # 同期的に書けるようにしている。
+        #
+        # SingleThreadedExecutor で足りる。デッドロックを避けるのに必要なのは
+        # 「executor が待ちループとは別のスレッドで回ること」だけで、
+        # コールバック同士の並行性は使っていない (どちらも参照の代入のみ)。
+        # MultiThreadedExecutor は内部の ThreadPoolExecutor が終了時に
+        # "cannot use Destroyable because destruction was requested" を
+        # 出すので避けている。
+        #
+        # コールバックは executor スレッド側で走るため、_odom_callback /
+        # _image_callback が書き込む current_pose / current_image には別
+        # スレッドから触ることになる。参照の代入だけなので GIL の範囲で安全
+        # (部分更新は起きない)。
         if not rclpy.ok():
             rclpy.init()
 
@@ -168,7 +177,7 @@ class GazeboEnv(Env):
         self.node.create_subscription(
             Image, f"{robot_ns}/image_raw2", self._image_callback, img_qos)
 
-        self._executor = MultiThreadedExecutor()
+        self._executor = SingleThreadedExecutor()
         self._executor.add_node(self.node)
         self._spin_thread = threading.Thread(
             target=self._executor.spin, daemon=True)
@@ -1482,12 +1491,21 @@ class GazeboEnv(Env):
         if getattr(self, "_closed", False):
             return
         self._closed = True
+
+        # 順序が重要。executor を止める前にノードを破棄すると、spin 中の
+        # executor が破棄済みのオブジェクトに触って次の通知が出る。
+        #   The following exception was never retrieved:
+        #   cannot use Destroyable because destruction was requested
         try:
             self._executor.shutdown(timeout_sec=2.0)
         except Exception:
             pass
         if self._spin_thread.is_alive():
             self._spin_thread.join(timeout=2.0)
+        try:
+            self._executor.remove_node(self.node)
+        except Exception:
+            pass
         try:
             self.node.destroy_node()
         except Exception:
