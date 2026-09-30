@@ -33,15 +33,16 @@ from gz_world_control import GzWorldControl  # noqa: E402
 
 
 def _resolve_data_file(env_var, filename, description):
-    """データファイルのパスを解決する。
+    """コースデータ CSV のパスを解決する。
 
     元は開発者の home を指す絶対パス (/home/icon-group/catkin_ws/src/...) が
     ハードコードされていて、他のマシンでは動かなかった。次の順で探す。
 
-      1. 環境変数 env_var
-      2. カレントディレクトリ直下の filename
+      1. 環境変数 env_var        別のコースを使いたいとき
+      2. gz_sionna の config/    同梱の Tellus コース (既定)
+      3. カレントディレクトリ    手元で差し替えたいとき
 
-    どちらにも無ければ、何を用意すべきかを示して例外にする。
+    通常は 2 で解決するので、環境変数を設定しなくても GazeboEnv() が動く。
     """
     path = os.environ.get(env_var)
     if path:
@@ -51,15 +52,20 @@ def _resolve_data_file(env_var, filename, description):
             )
         return path
 
+    packaged = os.path.join(
+        get_package_share_directory('gz_sionna'), 'config', filename)
+    if os.path.exists(packaged):
+        return packaged
+
     local = os.path.join(os.getcwd(), filename)
     if os.path.exists(local):
         return local
 
     raise FileNotFoundError(
         f"{description} が見つからない。\n"
+        f"  想定した場所: {packaged}\n"
         f"  環境変数 {env_var} にパスを設定するか、\n"
-        f"  カレントディレクトリに {filename} を置くこと。\n"
-        f"  このファイルはリポジトリに含まれておらず、著者に照会中である。"
+        f"  カレントディレクトリに {filename} を置くこと。"
     )
 import random
 import torch

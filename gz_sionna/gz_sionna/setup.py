@@ -36,6 +36,11 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ] + data_files_in(
+        # config/ には GazeboEnv が読むコースデータ 2 件が入っている。
+        # path_points.csv (x, y, yaw) は road_model.sdf の road_section_* の
+        # pose と 174 行すべて一致しており、同じコースを指している。
+        # cross_markers_400.csv (x1, y1, x2, y2) は進捗と報酬の基準。
+        'config',
         'launch',
         # models/with_materials/ には Sionna RT 用の Mitsuba シーン
         # (untitled.xml) と ITU マテリアル名付きの .ply が 133 個入っている。

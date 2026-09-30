@@ -131,3 +131,25 @@ Harmonic に適合していた。
 `tellus3_with_road.world` では該当の `<include>` をコメントアウトしている
 (Harmonic は解決できない `<include>` があると world 全体を読み込めない)。
 `pose` は残してあるので、受領したらコメントを外すだけでよい。
+
+## コースデータ CSV (2026-09-30 受領)
+
+同じ著者からメールで受領し、`gz_sionna/config/` に置いた。
+
+| ファイル | 列 | 行数 |
+|----------|-----|------|
+| `path_points.csv` | `x`, `y`, `yaw` | 174 |
+| `cross_markers_400.csv` | `x1`, `y1`, `x2`, `y2` | 500 |
+
+受領物は macOS の重複リネームで `path_points 1.csv` /
+`cross_markers_400 1.csv` となっていたので、`GazeboEnv` が期待する名前に戻した。
+内容は無改変。
+
+出自の確認: `path_points.csv` の **174 行すべてが `road_model.sdf` の
+`road_section_*` の pose と一致した** (x, y, yaw を 1e-4 の許容で照合)。
+つまりこの CSV はレーストラックの中心線そのものである。
+
+ファイル名は `400` だが `cross_markers_400.csv` の実際の行数は 500 である。
+`GazeboEnv` は `total_lines = len(cross_lines)` として読むので、報酬は
+1 本通過あたり `1000 / 500 = 2.0` 点、終了条件は `visited >= 500 - 32 = 468`
+となる。名前の 400 は生成時の指定値が残ったものと思われる。
