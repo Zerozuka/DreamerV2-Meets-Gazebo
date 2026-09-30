@@ -47,6 +47,32 @@ sudo apt install -y \
 
 Gazebo Harmonic arrives through the `ros-jazzy-ros-gz` vendor packages, so there is no separate Gazebo installation step.
 
+### For an NVIDIA GPU
+
+Strongly recommended. Sionna RT ray tracing and DreamerV2 training both run far faster on a GPU.
+
+Two separate things are needed, and having a working NVIDIA driver does **not** give you both:
+
+| For | Library | Comes from |
+| --- | --- | --- |
+| PyTorch (training) | `libcuda.so.1` | `libnvidia-compute-<version>` |
+| Sionna RT (ray tracing) | `libnvoptix.so.1` | `libnvidia-gl-<version>` |
+
+Ubuntu splits the NVIDIA driver into a compute part and a graphics part, and **OptiX — the GPU ray tracing runtime Sionna RT needs — is in the graphics part**. A compute-only driver install gives you CUDA but no OptiX. Check and fix:
+
+```bash
+# is OptiX present?
+ldconfig -p | grep libnvoptix || echo "OptiX missing"
+
+# which driver version is loaded?
+nvidia-smi --query-gpu=driver_version --format=csv,noheader
+
+# install the matching graphics part (570 here -- use your own major version)
+sudo apt install libnvidia-gl-570
+```
+
+Without it, ray tracing still works; it silently falls back to the CPU. See [Running on the GPU](#running-on-the-gpu).
+
 If you do not have uv yet:
 
 ```bash
@@ -104,16 +130,26 @@ uv venv --system-site-packages --python /usr/bin/python3.12 .venv
 ### 4. Install the Python dependencies
 
 ```bash
-uv pip sync requirements.lock --torch-backend cpu
+uv pip sync requirements.lock --torch-backend cu129
 ```
 
-`requirements.lock` holds exact versions for all 85 packages, so every machine gets the same environment. It is generated from `requirements.in`, which is the file to edit when adding a dependency:
+`requirements.lock` holds exact versions for all 104 packages, so every machine gets the same environment. It is generated from `requirements.in`, which is the file to edit when adding a dependency:
 
 ```bash
-uv pip compile requirements.in -o requirements.lock --python-version 3.12 --torch-backend cpu
+uv pip compile requirements.in -o requirements.lock --python-version 3.12 --torch-backend cu129
 ```
 
-`--torch-backend cpu` installs the CPU build of PyTorch. It is the default here because it is a much smaller download and because Sionna RT falls back to CPU ray tracing on machines without the OptiX runtime anyway. On a machine with a recent NVIDIA driver, swap `cpu` for `auto` in both commands and uv will pick the matching CUDA build. The flag is needed on both commands, because the PyTorch index that serves the `+cpu` wheels is not recorded in the lock file.
+`--torch-backend` selects which PyTorch build to install, and the same value is needed on both commands, because the PyTorch index that serves the `+cu129` wheels is not recorded in the lock file.
+
+| Your machine | Use |
+| --- | --- |
+| NVIDIA GPU, driver 525 or newer | `--torch-backend cu129` (the default here) |
+| No NVIDIA GPU | `--torch-backend cpu` |
+| Not sure | `--torch-backend auto` — uv reads the driver and picks for you |
+
+`cu129` is the default because it is what `auto` resolves to on the development machine (driver 570 / CUDA 12.8), and pinning it explicitly keeps the lock file reproducible, which `auto` would not. Note that PyPI's plain `torch` is built for CUDA 13 and reports *"The NVIDIA driver on your system is too old"* on a CUDA 12.x driver, which is why an explicit backend matters.
+
+If you change the backend, regenerate the lock with the same flag and re-run `uv pip sync`.
 
 ### 5. Build the workspace
 
@@ -160,19 +196,37 @@ scene.add(Receiver(name="rx", position=[20, 0, 1.7]))
 a, tau = sionna_compat.cir_for_ofdm(PathSolver()(scene, max_depth=5), normalize_delays=True)
 h = cir_to_ofdm_channel(subcarrier_frequencies(64, 30e3), a, tau, normalize=False)
 print("sionna", md.version("sionna"), "torch", md.version("torch"), "-> h", tuple(h.shape))
+
+import torch
+print("torch cuda:", torch.cuda.is_available(),
+      torch.cuda.get_device_name(0) if torch.cuda.is_available() else "(CPU only)")
+import mitsuba as mi
+print("mitsuba variant:", mi.variant())
 PY
 ```
 
-Expected output, give or take versions:
+Expected output on a machine with a GPU **and** OptiX installed:
+
+```text
+python 3.12.3 numpy 2.5.3 cv2 5.0.0
+[sionna_compat] mitsuba variant = cuda_ad_mono_polarized
+sionna 2.2.0 torch 2.13.0+cu129 -> h (1, 1, 1, 1, 1, 1, 64)
+torch cuda: True NVIDIA GeForce RTX 3090
+mitsuba variant: cuda_ad_mono_polarized
+```
+
+Without OptiX — that is, with `libnvidia-gl-<version>` missing — ray tracing still works but runs on the CPU, and you get two extra lines instead:
 
 ```text
 python 3.12.3 numpy 2.5.3 cv2 5.0.0
 [sionna_compat] cuda_ad_mono_polarized は使えない (RuntimeError)
 [sionna_compat] mitsuba variant = llvm_ad_mono_polarized
-sionna 2.2.0 torch 2.14.1+cpu -> h (1, 1, 1, 1, 1, 1, 64)
+sionna 2.2.0 torch 2.13.0+cu129 -> h (1, 1, 1, 1, 1, 1, 64)
+torch cuda: True NVIDIA GeForce RTX 3090
+mitsuba variant: llvm_ad_mono_polarized
 ```
 
-The two `[sionna_compat]` lines are normal on a machine without the OptiX runtime. See [Sionna falls back to the CPU](#sionna-falls-back-to-the-cpu).
+PyTorch and Sionna RT are independent here: `torch cuda: True` together with `mitsuba variant: llvm_...` means training uses the GPU while ray tracing does not. See [Running on the GPU](#running-on-the-gpu).
 
 ---
 
@@ -311,11 +365,56 @@ So that one conversion is now implemented directly in `gz_sionna/src/ros_image.p
 
 The one deliberate difference: `cv_bridge` ignores row padding and reads `step / channels` pixels per row, which shifts rows when `step > width * channels`. `ros_image.py` honours `step` and crops to `width`. Gazebo's `ros_gz` bridge publishes `step == width * 3`, so the difference never shows up in practice.
 
-### Sionna falls back to the CPU
+### Running on the GPU
 
-Sionna RT 2.x pins the Mitsuba variant to `cuda_ad_mono_polarized` at import time. That variant needs `libnvoptix.so.1`, which is a separate component from the NVIDIA driver — having a GPU and a driver is not enough. Without it, `load_scene()` dies with `Could not initialize OptiX!`.
+PyTorch and Sionna RT each need a different piece of the NVIDIA stack, and they fail independently. Getting one working does not get you the other.
 
-`gz_sionna/src/sionna_compat.py` handles this. Call `select_backend()` **before** importing `sionna.rt`:
+#### PyTorch
+
+A CUDA build of PyTorch has to match the driver's CUDA version. PyPI's plain `torch` targets CUDA 13; on a CUDA 12.x driver it loads but refuses to use the GPU:
+
+```text
+UserWarning: CUDA initialization: The NVIDIA driver on your system is too old
+(found version 12080).
+```
+
+Pick the build with `--torch-backend`, as described in [step 4](#4-install-the-python-dependencies). Check the result with:
+
+```bash
+.venv/bin/python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+#### Sionna RT and OptiX
+
+Sionna RT 2.x pins the Mitsuba variant to `cuda_ad_mono_polarized` at import time. That variant does ray tracing through **OptiX**, which is a different library from CUDA:
+
+| | Library | Purpose |
+| --- | --- | --- |
+| CUDA | `libcuda.so.1` | general GPU compute — what PyTorch uses |
+| OptiX | `libnvoptix.so.1` | GPU ray tracing — what Sionna RT uses |
+
+`libnvoptix.so.1` ships in `libnvidia-gl-<version>`, not in the compute-only driver package. A machine can therefore have a working GPU, a current driver and CUDA, and still have no OptiX. Without it, `load_scene()` fails:
+
+```text
+RuntimeError: [parser.cpp:1718] failed to instantiate scene plugin of
+type "scene": Could not initialize OptiX!
+```
+
+Installing the graphics part of the driver fixes it:
+
+```bash
+sudo apt install libnvidia-gl-570   # match your driver major version
+```
+
+In a container, OptiX additionally needs the `graphics` driver capability. The default `NVIDIA_DRIVER_CAPABILITIES=compute,utility` does not include it, and the symptom is identical to a missing package:
+
+```bash
+docker run --gpus all -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics ...
+```
+
+#### The fallback
+
+`gz_sionna/src/sionna_compat.py` makes the workspace run either way. Call `select_backend()` **before** importing `sionna.rt`:
 
 ```python
 import sionna_compat
@@ -323,7 +422,7 @@ sionna_compat.select_backend()
 import sionna.rt
 ```
 
-It tries to build a minimal scene with each variant in turn — setting the variant alone does not fail, the error only surfaces when a scene is created — and falls back to `llvm_ad_mono_polarized` (CPU) when OptiX is unavailable. Set `SIONNA_MI_VARIANT` to force a specific variant.
+It tries to build a minimal scene with each variant in turn — setting the variant alone does not raise, the error only surfaces when a scene is created — and falls back to `llvm_ad_mono_polarized` (CPU) when OptiX is unavailable. Set `SIONNA_MI_VARIANT` to force a specific variant.
 
 ---
 
@@ -390,7 +489,7 @@ Write the pattern as `g[z] sim`, not `gz sim`. The latter matches the `pkill` co
 
 **`KeyError: 16` from `cv_bridge`** — something still imports `cv_bridge`. Use `imgmsg_to_bgr8` from `ros_image` instead; see [The NumPy 2 problem](#the-numpy-2-problem).
 
-**`Could not initialize OptiX!`** — call `sionna_compat.select_backend()` before importing `sionna.rt`; see [Sionna falls back to the CPU](#sionna-falls-back-to-the-cpu).
+**`Could not initialize OptiX!`** — call `sionna_compat.select_backend()` before importing `sionna.rt`; see [Running on the GPU](#running-on-the-gpu).
 
 ---
 
