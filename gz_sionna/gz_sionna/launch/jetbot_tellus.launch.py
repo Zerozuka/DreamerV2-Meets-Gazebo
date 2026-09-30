@@ -62,7 +62,9 @@ from launch import LaunchDescription
 from launch.actions import (
     AppendEnvironmentVariable,
     DeclareLaunchArgument,
+    ExecuteProcess,
     IncludeLaunchDescription,
+    TimerAction,
 )
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -70,7 +72,6 @@ from launch.substitutions import (
     Command,
     LaunchConfiguration,
     PathJoinSubstitution,
-    PythonExpression,
 )
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterValue
@@ -123,11 +124,24 @@ def generate_launch_description():
         [gz_sionna_share, 'worlds', LaunchConfiguration('world')]
     )
 
-    # gui:=false ならサーバのみ (-s)。-r は即座に走らせる指定。
-    gz_flags = PythonExpression([
-        "'-r -v 2 ' if '", LaunchConfiguration('gui'),
-        "'.lower() in ('true', '1') else '-s -r -v 2 '",
-    ])
+    # サーバは gui の値に関わらず常に -s (サーバのみ) で起動し、GUI が要るときは
+    # 別プロセスとして後から繋ぐ。1 プロセスで両方やらせると実時間係数が 14 倍
+    # 落ちるためである。
+    #
+    # 原因は DISPLAY である。DISPLAY が設定されていると、サーバ側のカメラセンサ
+    # の描画までが EGL ではなく GLX を選ぶ。リモートデスクトップ (NoMachine /
+    # VNC) や SSH の X 転送の X サーバはハードウェア GLX を持たないので、そこで
+    # ソフトウェア描画に落ち、物理演算まで道連れになる。実測値は次のとおり。
+    #
+    #     1 プロセス (gz sim -r, DISPLAY あり)     RTF 0.068  GPU 0 %
+    #     サーバのみ (gz sim -s -r, DISPLAY なし)  RTF 0.989  GPU 33 %
+    #     サーバ + GUI を別プロセス                RTF 0.963  GPU 34 %
+    #
+    # --headless-rendering はサーバの描画を EGL に固定する指定で、DISPLAY が
+    # 設定されていてもセンサ描画が GPU に載る。GUI ウィンドウ自体は X サーバの
+    # GLX を使うので、リモートデスクトップではソフトウェア描画のままだが、
+    # 別プロセスなので物理演算は巻き込まれない。
+    gz_flags = '-s -r -v 2 --headless-rendering '
 
     gz_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -139,6 +153,19 @@ def generate_launch_description():
             'gz_args': [gz_flags, world_path],
             'on_exit_shutdown': 'true',
         }.items(),
+    )
+
+    # gui:=true のときだけ GUI を別プロセスで立てる。サーバが gz-transport の
+    # サービスを出すまで少し待つ (即座に起動すると接続に失敗することがある)。
+    gz_gui = TimerAction(
+        period=3.0,
+        actions=[
+            ExecuteProcess(
+                cmd=['gz', 'sim', '-g'],
+                output='screen',
+                condition=IfCondition(LaunchConfiguration('gui')),
+            )
+        ],
     )
 
     # ---- ロボット記述 --------------------------------------------------
@@ -246,6 +273,7 @@ def generate_launch_description():
         + resource_paths
         + [
             gz_sim,
+            gz_gui,
             robot_state_publisher,
             spawn,
             bridge,

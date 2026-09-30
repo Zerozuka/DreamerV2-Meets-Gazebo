@@ -245,24 +245,25 @@ source ~/ros2_ws/install/setup.bash
 ros2 launch gz_sionna jetbot_tellus.launch.py
 ```
 
-Without a GUI — **use this for anything that matters**:
+Without a GUI, for batch runs:
 
 ```bash
 ros2 launch gz_sionna jetbot_tellus.launch.py gui:=false
 ```
 
-The GUI is expensive. Measured on the development machine (RTX 3090, driver 570), same world and same camera sensor:
+The GUI costs almost nothing here, which is not the default behaviour of `gz sim` and is worth knowing about if you launch Gazebo by hand. Measured on the development machine (RTX 3090, driver 570), same world and same camera sensor, over a remote desktop:
 
 | | Real-time factor | Camera | GPU |
 | --- | --- | --- | --- |
-| `gui:=false` | **0.96** | 28.7 fps | 34 %, 722 MiB |
-| `gui:=true` | **0.068** | 2.5 fps | 0 %, 2 MiB |
+| `gui:=false` | 0.96 | 28.7 fps | 33 %, 561 MiB |
+| `gui:=true` | **0.98** | 28.0 fps | 36 %, 722 MiB |
+| plain `gz sim -r <world>` with `DISPLAY` set | **0.068** | 2.5 fps | 0 %, 2 MiB |
 
-A 14x difference, caused by the GUI window rather than by the simulation. Headless, the camera sensor renders through NVIDIA's EGL on `/dev/nvidia0` and uses the GPU. The GUI window renders through GLX on the X server instead, and when that X server has no hardware GLX — a remote desktop such as NoMachine or VNC, or X forwarded over SSH — everything falls back to software rendering and drags the physics down with it.
+The third row is what you get from a single `gz sim` process, and it is 14x slower. The cause is `DISPLAY`: when it is set, the **server** picks GLX rather than EGL for its camera sensor rendering, and on an X server without hardware GLX — a remote desktop such as NoMachine or VNC, or X forwarded over SSH — that falls back to software and drags the physics down with it.
 
-The robot still behaves correctly with the GUI on; it just moves 14x slower in wall-clock time. Driving it at 1.0 rad/s for 30 wall-clock seconds turned it 114 degrees, which is exactly 1.0 rad/s applied to the 2.0 seconds of simulated time that elapsed.
+The launch file avoids this by always starting the server as `gz sim -s -r --headless-rendering` and attaching `gz sim -g` as a **separate process** when `gui:=true`. `--headless-rendering` pins the server to EGL regardless of `DISPLAY`, so camera sensors stay on the GPU; the GUI window is still software-rendered over a remote desktop, but it is a different process and no longer holds the simulation back.
 
-So: run headless for training and evaluation, and turn the GUI on only to look at something.
+If you launch `gz sim` yourself, pass the same flags.
 
 Useful launch arguments:
 
@@ -480,6 +481,15 @@ c_jepa/
 
 **`gz: command not found`** — the real binary is `/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz`, and it is only on `PATH` after sourcing ROS 2.
 
+**The GUI never appears, and the log says `could not connect to display`** — you are in a terminal that has no `DISPLAY`, such as an SSH login or a plain console. Point it at the desktop session you want the window to open in:
+
+```bash
+ls /tmp/.X11-unix/        # X1001 means display :1001
+export DISPLAY=:1001
+```
+
+`DISPLAY` only decides which X server the window goes to; it does not decide where OpenGL runs, so it has no effect on the real-time factor. The display number is assigned per remote-desktop session and changes when you reconnect, so check it rather than hard-coding it.
+
 **Gazebo shows a black window, or crashes on start, over NoMachine / VNC / any virtual display** — set the Qt platform, and force software rendering only if that is not enough:
 
 ```bash
@@ -495,7 +505,7 @@ With `libnvidia-gl-<version>` installed, the GUI starts over NoMachine without `
 gz topic -e -t /stats -n 1 | grep real_time_factor
 ```
 
-Around 0.07 with the GUI open is the software-rendering cost described under [Terminal 1 — Gazebo](#terminal-1--gazebo), not a broken robot: relaunch with `gui:=false`. The value printed in the first second or two after startup is meaningless, so let it settle.
+Around 0.07 means the server is rendering its camera sensors in software. That happens when a single `gz sim` process runs both the server and the GUI with `DISPLAY` set; see [Terminal 1 — Gazebo](#terminal-1--gazebo). The launch file already avoids it, so you only hit this by starting `gz sim` by hand — add `-s --headless-rendering` and run `gz sim -g` separately. The robot is not broken: it is moving correctly in simulated time, just 14x slower in wall-clock time. The value printed in the first second or two after startup is meaningless, so let it settle.
 
 **Stale Gazebo processes after a crash** — a second server on the same partition makes the simulation behave strangely. List them first, then stop them:
 
