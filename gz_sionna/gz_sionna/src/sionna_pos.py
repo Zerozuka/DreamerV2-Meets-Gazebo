@@ -1,11 +1,15 @@
 #!/usr/bin/env python3.10
 
-import rospy
+# ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
+# 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
+# 検証できないため、意味を保つ層を挟んで呼び出し側を無改修にしている。
+# 詳細は gz_sionna/src/ros1_compat.py の docstring を参照。
+import ros1_compat as rospy
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
 import sionna.rt
 import os
-import tf
+import tf_transformations
 import mitsuba as mi
 import sionna_vispy
 
@@ -14,6 +18,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sionna.rt import load_scene, PlanarArray, Transmitter, Receiver, Camera,\
                       PathSolver, RadioMapSolver, subcarrier_frequencies, ITURadioMaterial, SceneObject
+
+# --- リポジトリ内資産のパス解決 -------------------------------------------
+# 元は開発者の home を指す絶対パス (/home/icon-group/...) がハードコードされて
+# いたが、実体は gz_sionna パッケージに同梱されている。ament_index で share の
+# 位置を引いて組み立てる。
+from ament_index_python.packages import get_package_share_directory as _gz_share
+
+
+def _gz_model(*parts):
+    """gz_sionna の models/ 配下のパスを返す。"""
+    return os.path.join(_gz_share("gz_sionna"), "models", *parts)
+# --------------------------------------------------------------------------
 
 robot1_pos = Point()
 robot2_pos = Point(0,0,0)
@@ -48,7 +64,7 @@ def odom_callback1(msg):
     q = msg.pose.pose.orientation
     quaternion = (q.x, q.y, q.z, q.w)
 
-    roll, pitch, yaw = tf.transformations.euler_from_quaternion(quaternion)
+    roll, pitch, yaw = tf_transformations.euler_from_quaternion(quaternion)
 
     robot1_orien.x = roll
     robot1_orien.y = pitch
@@ -65,7 +81,7 @@ def odom_callback2(msg):
     q = msg.pose.pose.orientation
     quaternion = (q.x, q.y, q.z, q.w)
 
-    roll, pitch, yaw = tf.transformations.euler_from_quaternion(quaternion)
+    roll, pitch, yaw = tf_transformations.euler_from_quaternion(quaternion)
 
     robot2_orien.x = roll
     robot2_orien.y = pitch
@@ -84,8 +100,8 @@ def main():
 
     rospy.loginfo("Subscribed to /robot_position")
 
-    scene = load_scene("/home/icon-group/catkin_ws/src/gz_sionna/gz_sionna/models/with_materials/untitled.xml") 
-    car_path = "/home/icon-group/catkin_ws/src/gz_sionna/gz_sionna/models/jetbot_real/jet.obj"
+    scene = load_scene(_gz_model("with_materials", "untitled.xml")) 
+    car_path = _gz_model("jetbot_real", "jet.obj")
 
     # if not no_preview:
     #         scene.preview();

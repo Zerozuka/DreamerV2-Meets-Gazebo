@@ -12,6 +12,9 @@
   <license>TODO</license>
 
   <exec_depend>rclpy</exec_depend>
+  <!-- ROS 1 の tf.transformations の後継。euler_from_quaternion と
+       quaternion_from_euler のみ使用している。 -->
+  <exec_depend>tf_transformations</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>

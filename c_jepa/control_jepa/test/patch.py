@@ -21,7 +21,7 @@
 #     return cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
 
 # # Load image or camera frame
-# img = cv2.imread("/home/icon-group/img.png")   # OR frame from camera
+# img = cv2.imread(output_path("img.png"))   # OR frame from camera
 # img= cv2.resize(img,(84,84))
 # muddy = add_mud_patch(img)
 
@@ -32,7 +32,8 @@
 
 import torch
 import numpy as np
-data_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/proposed_results.pt"
+from paths import model_path, output_path
+data_path = model_path("masked_data", "proposed_results.pt")
 
 data = torch.load(data_path)
 img = data["srcimage"][0]

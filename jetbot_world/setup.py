@@ -13,8 +13,14 @@ def data_files_in(*dirs):
     """
     entries = []
     for d in dirs:
-        for root, _, files in os.walk(d):
-            paths = [os.path.join(root, f) for f in files]
+        for root, subdirs, files in os.walk(d):
+            # __pycache__ は install 対象にしない。スクリプトをその場で実行すると
+            # 生成され、--symlink-install で
+            #   error: [Errno 17] File exists: .../__pycache__/*.pyc
+            # となってビルドが落ちる。
+            subdirs[:] = [s for s in subdirs if s != '__pycache__']
+            paths = [os.path.join(root, f) for f in files
+                     if not f.endswith(('.pyc', '.pyo'))]
             if paths:
                 entries.append((os.path.join('share', package_name, root), paths))
     return entries
@@ -23,9 +29,10 @@ def data_files_in(*dirs):
 setup(
     name=package_name,
     version='0.0.0',
-    # Python モジュールは持たない。src/killer.py は Gazebo Classic の
-    # gzserver/gzclient を kill するスクリプトで、Harmonic 移行 (#4, #6) で
-    # 役目がなくなるため、ここでは登録しない。
+    # Python モジュールは持たない。このパッケージは URDF・メッシュ・world の
+    # リソース置き場である。もとあった src/killer.py は Gazebo Classic の
+    # gzserver/gzclient を kill するスクリプトで、Harmonic には該当プロセスが
+    # ないため削除した。
     packages=[],
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),

@@ -13,8 +13,14 @@ def data_files_in(*dirs):
     """
     entries = []
     for d in dirs:
-        for root, _, files in os.walk(d):
-            paths = [os.path.join(root, f) for f in files]
+        for root, subdirs, files in os.walk(d):
+            # __pycache__ は install 対象にしない。スクリプトをその場で実行すると
+            # 生成され、--symlink-install で
+            #   error: [Errno 17] File exists: .../__pycache__/*.pyc
+            # となってビルドが落ちる。
+            subdirs[:] = [s for s in subdirs if s != '__pycache__']
+            paths = [os.path.join(root, f) for f in files
+                     if not f.endswith(('.pyc', '.pyo'))]
             if paths:
                 entries.append((os.path.join('share', package_name, root), paths))
     return entries
@@ -23,8 +29,12 @@ def data_files_in(*dirs):
 setup(
     name=package_name,
     version='0.0.0',
-    # src/img_show.py はまだ rospy ベースで、rclpy 移植 (#3) の対象。
     packages=[],
+    # src/img_show.py は rclpy に移植済み。ディレクトリ構成の是正 (本番コードを
+    # src/ から pkg 名のディレクトリへ移す) は移植後の整理項目なので、今は
+    # scripts= でそのままインストールする。setup.cfg の install_scripts により
+    # lib/img_showing/ に入るため `ros2 run img_showing img_show.py` で起動できる。
+    scripts=['src/img_show.py'],
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),

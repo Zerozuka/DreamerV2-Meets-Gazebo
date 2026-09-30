@@ -1,7 +1,8 @@
 import torch
 import numpy as np
+from paths import model_path
 
-pt_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/Proposed/case_2/proposed_results.pt"
+pt_path = model_path("Proposed", "case_2", "proposed_results.pt")
 
 print("Loading:", pt_path)
 data = torch.load(pt_path)

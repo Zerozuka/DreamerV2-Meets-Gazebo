@@ -6,12 +6,13 @@ import cv2
 import numpy as np
 import random
 import matplotlib.pyplot as plt
+from paths import model_path
 
 # ======================================================
 # CONFIG
 # ======================================================
-TEST_DATA_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/proposed_results_2.pt"
-MODEL_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/trained_model/patch_model2.pt"
+TEST_DATA_PATH = model_path("masked_data", "proposed_results_2.pt")
+MODEL_PATH = model_path("masked_data", "trained_model", "patch_model2.pt")
 BATCH_SIZE = 1
 NUM_SAMPLES_TO_SHOW = 10
 

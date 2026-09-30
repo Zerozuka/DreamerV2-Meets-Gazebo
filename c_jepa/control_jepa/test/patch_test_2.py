@@ -20,14 +20,15 @@ from dreamerv2.training.config_ import RacingCarConfig
 from tqdm.auto import tqdm
 import torch.distributions as dist
 from pathlib import Path
+from paths import model_path
 
 # ======================================================
 # CONFIG
 # ======================================================
-TEST_DATA_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/proposed_results.pt"
+TEST_DATA_PATH = model_path("masked_data", "proposed_results.pt")
 
-MODEL_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/trained_model/without_fix/patch_model.pt" #vae_mud_denoise  patch_model_3
-# DATA_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/proposed_results.pt"
+MODEL_PATH = model_path("masked_data", "trained_model", "without_fix", "patch_model.pt") #vae_mud_denoise  patch_model_3
+# DATA_PATH = model_path("masked_data", "proposed_results.pt")
 BATCH_SIZE = 64
 EPOCHS = 500
 LR = 1e-3
@@ -38,7 +39,7 @@ seed = 42
 MUD_COLOR = (14, 34, 49)  # BGR (OpenCV)
 
 BASE_MODEL_DIR = Path(
-    "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/trained_model"
+    model_path("masked_data", "trained_model")
 )
 PATCH_MODEL_PATHS = sorted(BASE_MODEL_DIR.rglob("patch_model.pt"))
 print(f"[INFO] Found {len(PATCH_MODEL_PATHS)} patch models")
@@ -630,7 +631,7 @@ def test():
 
     for vae_model_path in PATCH_MODEL_PATHS:
         print(f"[RUN] {vae_model_path}")
-        model_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/results/CarRacing-v2_0_pomdp/20_dec_gazebo/models_best_8.pth"  #31_oct_gym  7_nov_Gazebo
+        model_path = model_path("results", "CarRacing-v2_0_pomdp", "20_dec_gazebo", "models_best_8.pth")  #31_oct_gym  7_nov_Gazebo
         config = RacingCarConfig(capacity=1)
         RSSMModel, ObsEncoderModel, ActionModel = load_model(config, model_path, "cpu")
 

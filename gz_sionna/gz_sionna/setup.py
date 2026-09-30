@@ -13,8 +13,14 @@ def data_files_in(*dirs):
     """
     entries = []
     for d in dirs:
-        for root, _, files in os.walk(d):
-            paths = [os.path.join(root, f) for f in files]
+        for root, subdirs, files in os.walk(d):
+            # __pycache__ は install 対象にしない。スクリプトをその場で実行すると
+            # 生成され、--symlink-install で
+            #   error: [Errno 17] File exists: .../__pycache__/*.pyc
+            # となってビルドが落ちる。
+            subdirs[:] = [s for s in subdirs if s != '__pycache__']
+            paths = [os.path.join(root, f) for f in files
+                     if not f.endswith(('.pyc', '.pyo'))]
             if paths:
                 entries.append((os.path.join('share', package_name, root), paths))
     return entries
@@ -30,11 +36,21 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ] + data_files_in(
+        # config/ には GazeboEnv が読むコースデータ 2 件が入っている。
+        # path_points.csv (x, y, yaw) は road_model.sdf の road_section_* の
+        # pose と 174 行すべて一致しており、同じコースを指している。
+        # cross_markers_400.csv (x1, y1, x2, y2) は進捗と報酬の基準。
+        'config',
         'launch',
         # models/with_materials/ には Sionna RT 用の Mitsuba シーン
         # (untitled.xml) と ITU マテリアル名付きの .ply が 133 個入っている。
         'models',
         'rviz',
+        # src/gz_world_control.py を他パッケージ (control_jepa) から使うため
+        # share にも置く。本来は Python モジュールとして入れたいが、
+        # dreamerv2 / utils の名前衝突を解消するまでは packages=[] のため、
+        # 呼び出し側は share のパスを ament_index 経由で解決して import する。
+        'src',
         'worlds',
     ),
     install_requires=['setuptools'],

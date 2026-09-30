@@ -8,7 +8,18 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from gazebo_env import GazeboEnv
-import rospy
+# ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
+# 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
+# 検証できないため、意味を保つ層を挟んで呼び出し側を無改修にしている。
+# 詳細は gz_sionna/src/ros1_compat.py の docstring を参照。
+#
+# gz_sionna はまだ Python モジュールを install していない (dreamerv2 / utils の
+# 名前衝突を解消するまで packages=[] のため) ので share のパスを通す。
+import os as _os
+import sys as _sys
+from ament_index_python.packages import get_package_share_directory as _share
+_sys.path.insert(0, _os.path.join(_share('gz_sionna'), 'src'))
+import ros1_compat as rospy
 from nav_msgs.msg import Odometry
 from threading import Lock
 from wutils.models import Encoder, Predictor, PowerPredictor 
@@ -22,16 +33,17 @@ from models.vit_encoder import ViTEncoder
 from models.vit_decoder import ViTDecoder
 from models.temporal_transformer import TemporalTransformer
 from utils.patch_utils import patches_to_image 
+from paths import model_path, output_path
 
 
 rollout_id = 15
 vit_id = "256"
-AE_CKPT = "/home/icon-group/image_token/vit_sequence/results/"  + vit_id + "/autoencoder1.pt"
-TEMP_CKPT = "/home/icon-group/image_token/vit_sequence/results/"  + vit_id + "/temporal1.pt"
+AE_CKPT = model_path("results")  + vit_id + "/autoencoder1.pt"
+TEMP_CKPT = model_path("results")  + vit_id + "/temporal1.pt"
 
-csv_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/predicted_power_log.csv"
+csv_path = output_path("predicted_power_log.csv")
 case_id = "case_2/"
-output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/baseline_dqn/" + str(rollout_id) + "/" + case_id
+output_dir = output_path("baseline_dqn") + str(rollout_id) + "/" + case_id
 _video_writers = {} 
 last_completed = None
 current_image = None
@@ -374,7 +386,7 @@ if __name__ == "__main__":
 
     MODEL_PATH = "training/gazebo/gazebo_step_230000.pt"    #gazebo_step_50000 gazebo_best
 
-    env = ImageEnv(GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv"))
+    env = ImageEnv(GazeboEnv())
 
     state_dim = (4, 84, 84)
     action_dim = env.action_space.n

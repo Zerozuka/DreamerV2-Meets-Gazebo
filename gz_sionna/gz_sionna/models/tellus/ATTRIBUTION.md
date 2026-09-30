@@ -90,3 +90,66 @@ SOFTWARE.
 ## 注意
 
 この MIT ライセンスは `Gazebo-Sionna-RT-Integration` のものである。**このリポジトリ本体 (`DreamerV2-Meets-Gazebo`) は依然としてライセンス未定**で、全 `package.xml` の `<license>` が `TODO` のままである。著者への確認が必要。
+
+## 追加で受領したモデル (2026-09-30)
+
+同じ著者から個別にメールで受領した 3 モデルも `models/` 配下に置いた。
+`Gazebo-Sionna-RT-Integration` には含まれていないものである。
+
+| モデル | 内容 |
+|--------|------|
+| `race_end` | レーストラックのゴールライン (`short_path.sdf`) |
+| `road_model` | レーストラック本体。`road_section_0` 以下 350 個の入れ子モデル |
+| `road_material` | 路面テクスチャ `road_texture.jpg` (894x894) |
+
+受領物からの変更点:
+
+- `road_model/model.config` の `<name>` が `my_model` のままだったので
+  `road_model` に修正した。`race_end` も含め `<author>` と `<description>` が
+  Blender エクスポートのテンプレート (`Your Name` 等) だったので実態に合わせた
+- **Ogre material script を PBR 指定に置き換えた** (`road_model.sdf` で 174 箇所、
+  `race_end/short_path.sdf` で 1 箇所)。Harmonic は Ogre material script に
+  非対応で、そのままだと 174 件の警告が出て路面が無地になる。`MyRoad/Road` の
+  定義 (ambient 0.8 / diffuse 1.0 / `road_texture.jpg`) を `<albedo_map>` に移した
+- `race_end` が参照していた `model://end_line/materials/...` は、その `end_line`
+  モデルが受領物に含まれていないため解決できない。単色 (ほぼ白) に置き換えた
+- `road_model/model.sdf` (22 行) は取り込んでいない。`model.config` が
+  `road_model.sdf` を指しており未使用で、中身は `model://tellus/meshes/tellus.dae`
+  を参照する tellus モデルの残骸だった
+- 同梱の `road_material/materials/scripts/road.material` は Harmonic では
+  使われないが、元定義の参照用に残している
+
+著者が同時に送ってきた `tellus3_with_road.world` は取り込んでいない。差分を
+取った結果、こちらの版に対して新しい内容はなく、違いは (1) Ogre material
+script が残っている、(2) include の多くがコメントアウトされている、
+(3) gz-sim システムプラグインが無い、の 3 点のみで、いずれもこちらの版の方が
+Harmonic に適合していた。
+
+### まだ入手できていないモデル
+
+`cross_line`, `receiver_1`, `receiver_2`, `receiver_3` の 4 件。
+`tellus3_with_road.world` では該当の `<include>` をコメントアウトしている
+(Harmonic は解決できない `<include>` があると world 全体を読み込めない)。
+`pose` は残してあるので、受領したらコメントを外すだけでよい。
+
+## コースデータ CSV (2026-09-30 受領)
+
+同じ著者からメールで受領し、`gz_sionna/config/` に置いた。
+
+| ファイル | 列 | 行数 |
+|----------|-----|------|
+| `path_points.csv` | `x`, `y`, `yaw` | 174 |
+| `cross_markers_400.csv` | `x1`, `y1`, `x2`, `y2` | 500 |
+
+受領物は macOS の重複リネームで `path_points 1.csv` /
+`cross_markers_400 1.csv` となっていたので、`GazeboEnv` が期待する名前に戻した。
+内容は無改変。
+
+出自の確認: `path_points.csv` の **174 行すべてが `road_model.sdf` の
+`road_section_*` の pose と一致した** (x, y, yaw を 1e-4 の許容で照合)。
+つまりこの CSV はレーストラックの中心線そのものである。
+
+ファイル名は `400` だが `cross_markers_400.csv` の実際の行数は 500 である。
+`GazeboEnv` は `total_lines = len(cross_lines)` として読むので、報酬は
+1 本通過あたり `1000 / 500 = 2.0` 点、終了条件は `visited >= 500 - 32 = 468`
+となる。名前の 400 は生成時の指定値が残ったものと思われる。

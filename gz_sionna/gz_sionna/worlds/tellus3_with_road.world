@@ -14,6 +14,36 @@
       <real_time_factor>1</real_time_factor>
       <real_time_update_rate>1000</real_time_update_rate>
     </physics>
+
+    <!-- ===================== gz-sim システムプラグイン =====================
+      Gazebo Classic では暗黙に有効だった機能が、Harmonic では world 内で
+      明示的に読み込む必要がある。
+
+      Physics          物理演算そのもの
+      UserCommands     /world/default/set_pose や spawn/delete を提供する。
+                       gazebo_env.py のエピソード reset が使う
+                       (Classic の /gazebo/set_model_state に相当)
+      SceneBroadcaster GUI とクライアントへ状態を配信し、
+                       /world/default/control を提供する
+                       (Classic の /gazebo/pause_physics に相当)
+      Sensors          カメラと LiDAR の描画。これが無いと
+                       jetbot_real.gazebo.xacro の camera2 / lds_lfcd_sensor が
+                       何も出さない
+      Imu              IMU センサの処理
+    -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu"/>
+
     <scene>
       <ambient>1 1 1 1</ambient> <!-- <ambient>0.4 0.4 0.4 1</ambient> -->
       <background>0.7 0.7 0.7 1</background>
@@ -84,11 +114,13 @@
               <size>100 100</size>
             </plane>
           </geometry>
+          <!-- Ogre material script (Gazebo/Grey) は Classic のインストール先に
+               依存しており Harmonic では解決できないため、SDF の PBR 指定に
+               置き換えた。色は Gazebo/Grey 相当。 -->
           <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/Grey</name>
-            </script>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
           </material>
         </visual>
         <self_collide>0</self_collide>
@@ -375,27 +407,37 @@
   <pose>0 0 0 0 0 0</pose>
 </include>
 
+<!-- Harmonic は同名モデルの重複を拒否する ("model with name[...] already
+     exists")。他の include (cam_front 等) と同様に <name> を与える。 -->
 <include>
   <uri>model://radio_tower_</uri>
+  <name>radio_tower_1</name>
   <pose> 26.627333 6.138611 3.308903 0 0 0</pose>
 </include>
 
 <include>
   <uri>model://radio_tower_</uri>
+  <name>radio_tower_2</name>
   <pose> 11.449739 12.156978 3.308903 0 0 0</pose>
 </include>
 
-<include>
+<!-- cross_line と receiver_1..3 のモデルは未入手のためコメントアウトしている。
+     Harmonic では解決できない <include> があると SDF のパースがそこで止まり、
+     world 全体が読み込めなくなる (初期化に到達しない)。著者から受領したら
+     models/ に置いてコメントを外す。pose はそのまま残してある。 -->
+
+<!-- <include>
   <uri>model://cross_line</uri>
   <pose>0 0 0 0 0 0</pose>
-</include>
+</include> -->
 
 <include>
 <uri>model://race_end</uri>
+<name>race_end</name>
 <pose>0 0 0 0 0 0</pose>
 </include>
 
-<include>
+<!-- <include>
 <uri>model://receiver_1</uri>
 <pose>  8.238358 12.161644  3.568326 1.421040 0 0</pose>
 </include>
@@ -408,7 +450,7 @@
 <include>
 <uri>model://receiver_3</uri>
 <pose> -9.805386 12.161644  3.568326  1.421040 0 0 </pose>
-</include>
+</include> -->
  <!-- 8.238777 -5.601792 3.077197 -1.528551 0 0
   -4.008763 0.092765 3.274808 0 0 0 -->
 

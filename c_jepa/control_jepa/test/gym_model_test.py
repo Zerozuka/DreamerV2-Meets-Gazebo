@@ -12,6 +12,7 @@ from tqdm.auto import tqdm
 import pickle
 import os
 import cv2
+from paths import model_path
 
 
 
@@ -206,7 +207,7 @@ if __name__ == "__main__":
 
     device = "cuda"
     # model_path = "path/to/saved_model.pth"
-    model_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/results/CarRacing-v2_0_pomdp/gym_31_oct/models_1980000.pth"
+    model_path = model_path("results", "CarRacing-v2_0_pomdp", "gym_31_oct", "models_1980000.pth")
 
     env = gym.make("CarRacing-v2", continuous=False, render_mode="human")
     env = OneHotAction(ImageEnv(env))

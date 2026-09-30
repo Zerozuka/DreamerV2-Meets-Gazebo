@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+  復元したラッパー。メッシュは上流同梱の models/jepa_objects/cube.obj を
+  そのまま参照しており、ファイルは複製していない。
+
+  static を true にしている。world 側の include は <pose> しか与えておらず
+  (例: tellus3_with_road.world の cube_2 は pose 2.814624 0.555732 0 0 0 0)、
+  経路上の静的障害物として置かれていると解釈した。動かしたい場合は false に
+  する。上流の意図は未確認。
+-->
+<sdf version="1.7">
+  <model name="cube">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://jepa_objects/cube.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://jepa_objects/cube.obj</uri>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

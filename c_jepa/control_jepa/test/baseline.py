@@ -18,7 +18,18 @@ import pickle
 import os
 from cv_bridge import CvBridge
 import cv2
-import rospy
+# ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
+# 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
+# 検証できないため、意味を保つ層を挟んで呼び出し側を無改修にしている。
+# 詳細は gz_sionna/src/ros1_compat.py の docstring を参照。
+#
+# gz_sionna はまだ Python モジュールを install していない (dreamerv2 / utils の
+# 名前衝突を解消するまで packages=[] のため) ので share のパスを通す。
+import os as _os
+import sys as _sys
+from ament_index_python.packages import get_package_share_directory as _share
+_sys.path.insert(0, _os.path.join(_share('gz_sionna'), 'src'))
+import ros1_compat as rospy
 import pandas as pd 
 from nav_msgs.msg import Odometry
 from threading import Lock
@@ -29,17 +40,18 @@ from models.vit_encoder import ViTEncoder
 from models.vit_decoder import ViTDecoder
 from models.temporal_transformer import TemporalTransformer
 from utils.patch_utils import patches_to_image
+from paths import model_path, output_path
 
 
 
-AE_CKPT = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/vit_model/autoencoder1.pt"
-TEMP_CKPT = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/vit_model/temporal1.pt"
+AE_CKPT = model_path("vit_model", "autoencoder1.pt")
+TEMP_CKPT = model_path("vit_model", "temporal1.pt")
 # -------------------------
 # GLOBALS
 # -------------------------
-csv_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/predicted_power_log.csv"
+csv_path = output_path("predicted_power_log.csv")
 case_id = "case_0/"
-output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/baseline/" + case_id
+output_dir = output_path("baseline") + case_id
 _video_writers = {} 
 last_completed = None
 current_image = None
@@ -586,7 +598,7 @@ if __name__ == "__main__":
     pred_video1 = output_dir + "Video/pred_frame1.mp4"
     flag_pub = rospy.Publisher('/render_trigger', Int32, queue_size=10)
     
-    env = GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv")
+    env = GazeboEnv()
     
     datapath = output_dir + "Baseline_results.pt"
     obs, _ = env.reset()
