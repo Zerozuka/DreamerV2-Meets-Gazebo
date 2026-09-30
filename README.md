@@ -245,11 +245,24 @@ source ~/ros2_ws/install/setup.bash
 ros2 launch gz_sionna jetbot_tellus.launch.py
 ```
 
-Without a GUI (faster, and what you want over SSH):
+Without a GUI — **use this for anything that matters**:
 
 ```bash
 ros2 launch gz_sionna jetbot_tellus.launch.py gui:=false
 ```
+
+The GUI is expensive. Measured on the development machine (RTX 3090, driver 570), same world and same camera sensor:
+
+| | Real-time factor | Camera | GPU |
+| --- | --- | --- | --- |
+| `gui:=false` | **0.96** | 28.7 fps | 34 %, 722 MiB |
+| `gui:=true` | **0.068** | 2.5 fps | 0 %, 2 MiB |
+
+A 14x difference, caused by the GUI window rather than by the simulation. Headless, the camera sensor renders through NVIDIA's EGL on `/dev/nvidia0` and uses the GPU. The GUI window renders through GLX on the X server instead, and when that X server has no hardware GLX — a remote desktop such as NoMachine or VNC, or X forwarded over SSH — everything falls back to software rendering and drags the physics down with it.
+
+The robot still behaves correctly with the GUI on; it just moves 14x slower in wall-clock time. Driving it at 1.0 rad/s for 30 wall-clock seconds turned it 114 degrees, which is exactly 1.0 rad/s applied to the 2.0 seconds of simulated time that elapsed.
+
+So: run headless for training and evaluation, and turn the GUI on only to look at something.
 
 Useful launch arguments:
 
@@ -467,12 +480,22 @@ c_jepa/
 
 **`gz: command not found`** — the real binary is `/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz`, and it is only on `PATH` after sourcing ROS 2.
 
-**Gazebo shows a black window, or crashes on start, over NoMachine / VNC / any virtual display** — force software rendering:
+**Gazebo shows a black window, or crashes on start, over NoMachine / VNC / any virtual display** — set the Qt platform, and force software rendering only if that is not enough:
 
 ```bash
-export LIBGL_ALWAYS_SOFTWARE=1
 export QT_QPA_PLATFORM=xcb
+export LIBGL_ALWAYS_SOFTWARE=1   # only if the window is still black or Gazebo crashes
 ```
+
+With `libnvidia-gl-<version>` installed, the GUI starts over NoMachine without `LIBGL_ALWAYS_SOFTWARE` at all, so try `QT_QPA_PLATFORM=xcb` on its own first.
+
+**The simulation crawls and the robot barely moves** — check the real-time factor, shown in the bottom-left of the GUI or on the stats topic:
+
+```bash
+gz topic -e -t /stats -n 1 | grep real_time_factor
+```
+
+Around 0.07 with the GUI open is the software-rendering cost described under [Terminal 1 — Gazebo](#terminal-1--gazebo), not a broken robot: relaunch with `gui:=false`. The value printed in the first second or two after startup is meaningless, so let it settle.
 
 **Stale Gazebo processes after a crash** — a second server on the same partition makes the simulation behave strangely. List them first, then stop them:
 
