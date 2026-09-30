@@ -26,22 +26,33 @@ Sensors システムは描画コンテキストを要求するため、設定し
 
 シミュレーション速度について
 ----------------------------
-実時間係数が 1.0 を大きく下回る。原因を切り分けた結果は次のとおり。
+実時間係数を落とす要因は 2 段あり、両方を実測で切り分けた。
 
-    Sensors あり + ロボット spawn      real_time_factor 0.262
-    Sensors なし + ロボット spawn      real_time_factor 0.263
-    Sensors あり + ロボットなし        real_time_factor 1.000
+第 1 段: 衝突形状 (解消済み)
 
-Sensors システム (カメラと LiDAR の描画) は原因ではない。ロボットを
-spawn した時点で 1.0 から 0.26 に落ちており、支配的なのは物理演算側である。
+    jetbot_real.urdf.xacro は 20 個すべてのリンクで視覚用の高精細 STL を
+    そのまま衝突形状にも使っていた (collision の三角形 合計 745,410、
+    nano_link.STL 単体で 374,540)。DART が毎ステップこれを衝突判定するため、
+    ロボットを spawn した時点で 1.0 から 0.26 に落ちていた。
 
-jetbot_real.urdf.xacro は 20 個すべてのリンクで、視覚用の高精細 STL を
-そのまま衝突形状にも使っている (合計 37.3 MB、nano_link.STL 単体で 18.7 MB)。
-DART がこれを毎ステップ衝突判定するため重い。
+    接地に関わるのは車輪のタイヤとキャスタだけで、他は固定関節で base_link に
+    まとめられる。境界ボックスから箱・円柱・球に置き換えて約 600 三角形にした。
+    これで gz 単体では 1.000 が出る。
 
-改善するなら衝突形状を簡略化する。ほとんどのリンクは固定関節で base_link に
-まとめられるので、箱や円柱で近似しても挙動は変わらない。接地に関わるのは
-車輪とキャスタだけである。移植の範囲を超えるため本 PR では扱っていない。
+第 2 段: センサのブリッジ (現在の支配要因)
+
+    衝突形状を直した後の実測値。
+
+        bridge_sensors:=true    real_time_factor 0.0025
+        bridge_sensors:=false   real_time_factor 1.000
+
+    ros_gz_bridge が /image_raw2 と /scan を購読すると Sensors システムが
+    描画を始める。GPU が使えない環境 (LIBGL_ALWAYS_SOFTWARE=1) では
+    640x480 のカメラ 30 Hz と 1147 点 LiDAR を CPU で描くため 400 倍遅くなる。
+
+    走行や odom の確認だけなら bridge_sensors:=false で等速で回る。
+    C-JEPA の学習には画像が必要なので true にするが、その場合は GPU が
+    使える環境を用意すること。
 """
 
 import os
@@ -81,8 +92,11 @@ def generate_launch_description():
         DeclareLaunchArgument('z_pos', default_value='0.1'),
         DeclareLaunchArgument('yaw', default_value='-1.573762'),
         DeclareLaunchArgument('view_result_image', default_value='false'),
-        # カメラと LiDAR を ROS 側へ橋渡しするか。ROS 側の負荷を下げたい場合に
-        # false にする。シミュレーションの速度には影響しない (下記参照)。
+        # カメラと LiDAR を ROS 側へ橋渡しするか。
+        #
+        # これを購読すると Sensors システムが描画を始めるため、GPU が使えない
+        # 環境では実時間係数が 1.000 から 0.0025 まで落ちる (実測)。走行や odom の
+        # 確認だけなら false にすると等速で回る。詳細はモジュール docstring 参照。
         DeclareLaunchArgument('bridge_sensors', default_value='true'),
     ]
 
