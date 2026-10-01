@@ -323,12 +323,19 @@ space       stop               q           quit
 + / -       faster / slower
 ```
 
-To just watch without steering, let it drive a fixed pattern:
+To just watch without steering, let it drive a fixed pattern or follow the recorded course:
 
 ```bash
-.venv/bin/python tools/drive.py --demo        # until Ctrl-C
-.venv/bin/python tools/drive.py --demo 30     # for 30 seconds
+.venv/bin/python tools/drive.py --demo        # forward and turn, until Ctrl-C
+.venv/bin/python tools/drive.py --demo 30     # the same, for 30 seconds
+.venv/bin/python tools/drive.py --path        # follow config/path_points.csv
 ```
+
+`--path` runs a pure pursuit controller over the 174 recorded course points, starting from whichever one is nearest. The spawn pose sits on the course — 0.10 m from point #11, pointing the same way — so it picks up the track immediately.
+
+**Expect it to stop partway.** `path_points.csv` is the course for `tellus3_with_road.world`, while the default `tellus3.world` is the bare Tellus building with its full mesh as collision geometry, pillars included. Measured from a clean launch, the robot follows the course for about 1.7 m and then stops dead against a pillar at `(5.07, 6.08)`. Started mid-course at point #42 it managed about 5 m before being pushed off. Parts of the course are clear and parts are not. This should resolve itself once the models missing from `tellus3_with_road.world` turn up; see [Known gaps](#known-gaps).
+
+Steering by hand is the reliable way to cover ground: the Jetbot has no obstacle avoidance and the arena is full of furniture.
 
 `--no-follow` leaves the camera alone, `--speed` and `--turn` change how fast it goes, and `--back` / `--up` move the chase camera.
 
