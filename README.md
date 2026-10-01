@@ -87,15 +87,42 @@ Six steps. Run them in order; each one is explained below.
 
 ### 1. Create a colcon workspace and put the repository in it
 
-ROS 2 builds a *workspace*, not a bare repository. The repository has to sit under `<workspace>/src/`.
-
 ```bash
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 git clone https://github.com/Zerozuka/DreamerV2-Meets-Gazebo.git
 ```
 
-If you already keep the clone somewhere else, symlink it instead of copying:
+#### What a workspace is, and why the extra directory
+
+ROS 2 does not run packages from the directory you cloned them into. It builds them first, into a separate tree, and runs them from there. That tree is the **workspace**, and `colcon` is the tool that builds it. The name `ros2_ws` is only a convention; any path works.
+
+A workspace is four directories, three of which `colcon build` creates:
+
+```text
+~/ros2_ws/
+  src/      the repositories you are working on   <- you create this
+  build/    intermediate build output             <- colcon creates these three
+  install/  what actually gets run
+  log/      build logs
+```
+
+So the repository lives in **two** places at once, and they are not copies of each other:
+
+| | What it is | What it holds |
+| --- | --- | --- |
+| `~/ros2_ws/src/DreamerV2-Meets-Gazebo/` | the git clone — **where you edit** | the source as you wrote it |
+| `~/ros2_ws/install/gz_sionna/share/gz_sionna/` | what colcon produced — **what ROS 2 runs** | launch files, worlds, models, `src/` modules |
+
+This matters in practice. `ros2 launch gz_sionna jetbot_tellus.launch.py` does not read the launch file from your clone; it reads the one under `install/`. The same goes for the world files, the Gazebo models, and the shared Python modules in `gz_sionna/src/`. If you edit one of those and nothing changes, you have not rebuilt.
+
+`--symlink-install` (used in step 5) softens this: instead of copying files into `install/`, colcon symlinks them back to your clone, so edits to Python files, world files and models take effect immediately. You still have to rebuild after **adding a new file**, or after changing a `package.xml`, `setup.py` or launch file.
+
+Sourcing `install/setup.bash` (step 6) is what tells your shell where the built packages are. Without it, `ros2 launch gz_sionna ...` reports that the package does not exist, even though the clone is right there.
+
+#### If you already keep the clone somewhere else
+
+Symlink it rather than cloning a second copy. That is what this repository's author does, and it works exactly like a clone placed directly in `src/`:
 
 ```bash
 mkdir -p ~/ros2_ws/src
@@ -170,63 +197,56 @@ Same as step 2: every new terminal needs this, and zsh users want `setup.zsh`.
 
 ### Verify the setup
 
-This checks everything at once and prints a line per component.
-
 ```bash
-cd ~/ros2_ws/src/DreamerV2-Meets-Gazebo
-.venv/bin/python - <<'PY'
-import importlib.metadata as md, os, sys, numpy as np
-import rclpy, tf_transformations, cv2
-from nav_msgs.msg import Odometry
-from ament_index_python.packages import get_package_share_directory as share
-print("python", sys.version.split()[0], "numpy", np.__version__, "cv2", cv2.__version__)
-
-sys.path.insert(0, os.path.join(share("gz_sionna"), "src"))
-import sionna_compat
-sionna_compat.select_backend()
-from sionna.rt import load_scene, PathSolver, Transmitter, Receiver, PlanarArray
-from sionna.phy.channel import cir_to_ofdm_channel, subcarrier_frequencies
-import sionna.rt as rt
-
-scene = load_scene(rt.scene.simple_street_canyon)
-scene.tx_array = PlanarArray(num_rows=1, num_cols=1, pattern="iso", polarization="V")
-scene.rx_array = PlanarArray(num_rows=1, num_cols=1, pattern="iso", polarization="V")
-scene.add(Transmitter(name="tx", position=[-33, 0, 32]))
-scene.add(Receiver(name="rx", position=[20, 0, 1.7]))
-a, tau = sionna_compat.cir_for_ofdm(PathSolver()(scene, max_depth=5), normalize_delays=True)
-h = cir_to_ofdm_channel(subcarrier_frequencies(64, 30e3), a, tau, normalize=False)
-print("sionna", md.version("sionna"), "torch", md.version("torch"), "-> h", tuple(h.shape))
-
-import torch
-print("torch cuda:", torch.cuda.is_available(),
-      torch.cuda.get_device_name(0) if torch.cuda.is_available() else "(CPU only)")
-import mitsuba as mi
-print("mitsuba variant:", mi.variant())
-PY
+.venv/bin/python tools/verify_setup.py
 ```
 
-Expected output on a machine with a GPU **and** OptiX installed:
+It checks each component in turn and prints a line for each. On success:
 
 ```text
-python 3.12.3 numpy 2.5.3 cv2 5.0.0
-[sionna_compat] mitsuba variant = cuda_ad_mono_polarized
-sionna 2.2.0 torch 2.13.0+cu129 -> h (1, 1, 1, 1, 1, 1, 64)
-torch cuda: True NVIDIA GeForce RTX 3090
-mitsuba variant: cuda_ad_mono_polarized
+=== interpreter ===
+  OK  python 3.12 from the virtual environment  python 3.12.3
+
+=== ROS 2 (from apt, visible through --system-site-packages) ===
+  OK  rclpy
+  OK  message packages
+  OK  tf_transformations
+  OK  cv2  opencv 5.0.0
+
+=== workspace (needs colcon build and a sourced install) ===
+  OK  gz_sionna share directory  /home/you/ros2_ws/install/gz_sionna/share/gz_sionna
+  OK  ros_image (the cv_bridge replacement)  (4, 6, 3) bgr8
+
+=== Python dependencies (from requirements.lock) ===
+  OK  numpy 2  numpy 2.5.3
+  OK  torch  torch 2.13.0+cu129  cuda: NVIDIA GeForce RTX 3090
+  OK  reinforcement learning and logging packages  gymnasium 1.3.0
+  OK  GazeboEnv imports  GazeboEnv
+
+=== Sionna ===
+  OK  backend selection  cuda_ad_mono_polarized  (OptiX available, ray tracing on the GPU)
+  OK  ray tracing and OFDM channel generation  sionna 2.2.0  h (1, 1, 1, 1, 1, 1, 64) complex64
+
+=== all 13 checks passed ===
 ```
 
-Without OptiX — that is, with `libnvidia-gl-<version>` missing — ray tracing still works but runs on the CPU, and you get two extra lines instead:
+A failing check prints what went wrong and what to do about it, and the exit code is 1, so you can use it from a script:
 
 ```text
-python 3.12.3 numpy 2.5.3 cv2 5.0.0
-[sionna_compat] cuda_ad_mono_polarized は使えない (RuntimeError)
-[sionna_compat] mitsuba variant = llvm_ad_mono_polarized
-sionna 2.2.0 torch 2.13.0+cu129 -> h (1, 1, 1, 1, 1, 1, 64)
-torch cuda: True NVIDIA GeForce RTX 3090
-mitsuba variant: llvm_ad_mono_polarized
+  NG  rclpy
+      ModuleNotFoundError: No module named 'rclpy'
+      -> source /opt/ros/jazzy/setup.bash, and make sure .venv was created
+         with --system-site-packages  (README: steps 2 and 3)
 ```
 
-PyTorch and Sionna RT are independent here: `torch cuda: True` together with `mitsuba variant: llvm_...` means training uses the GPU while ray tracing does not. See [Running on the GPU](#running-on-the-gpu).
+`--quick` skips the ray tracing check, which is the slow one.
+
+Two lines are worth reading rather than skipping past:
+
+- **`backend selection`** says `cuda_ad_mono_polarized` when ray tracing runs on the GPU, and `llvm_ad_mono_polarized` when it has fallen back to the CPU. The fallback still works, just slower. See [Running on the GPU](#running-on-the-gpu).
+- **`torch`** reports CUDA separately. PyTorch and Sionna RT use different parts of the NVIDIA stack and fail independently, so `cuda: NVIDIA GeForce RTX 3090` together with `llvm_...` above it is a real combination: training uses the GPU while ray tracing does not.
+
+A `UserWarning` about `Axes3D` appears before the output. It is expected; see [Troubleshooting](#troubleshooting).
 
 ---
 
@@ -488,6 +508,15 @@ c_jepa/
 **`ModuleNotFoundError: No module named 'rclpy'`** — you either forgot `source /opt/ros/jazzy/setup.bash`, or the virtual environment was created without `--system-site-packages`. Delete `.venv` and redo step 3.
 
 **`ModuleNotFoundError: No module named 'sionna'` / `'torch'` / `'gymnasium'`** — you are running the apt interpreter. Use `.venv/bin/python` or `uv run`.
+
+**`UserWarning: Unable to import Axes3D ... multiple versions of Matplotlib`** — expected, and harmless here. It is a side effect of `--system-site-packages`:
+
+```text
+.venv/lib/python3.12/site-packages/mpl_toolkits   no __init__.py  (namespace package, matplotlib 3.11 from pip)
+/usr/lib/python3/dist-packages/mpl_toolkits       has __init__.py (regular package, matplotlib 3.6.3 from apt)
+```
+
+Python prefers a regular package over a namespace one, so apt's older `mpl_toolkits` shadows the virtual environment's, and `Axes3D` fails to load against the newer matplotlib. Only 3D plotting is affected, and nothing in this repository uses it. Removing `python3-matplotlib` would silence the warning but risks breaking other apt packages that depend on it, so it is left alone.
 
 **`ModuleNotFoundError: No module named 'paths'` / `'ros_image'` / `'gz_world_control'`** — the workspace is not sourced, or not built. Run `colcon build --symlink-install` in `~/ros2_ws`, then `source ~/ros2_ws/install/setup.bash`. These modules are resolved through `ament_index` from `gz_sionna`'s share directory.
 
