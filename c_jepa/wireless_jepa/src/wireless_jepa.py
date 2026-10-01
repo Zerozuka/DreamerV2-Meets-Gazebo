@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.10
+#!/usr/bin/env python3
 
 # ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
 # 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
@@ -14,6 +14,17 @@ _sys.path.insert(0, _os.path.join(_share('gz_sionna'), 'src'))
 import ros1_compat as rospy
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
+# Sionna RT 2.x は import 時に mitsuba の variant を cuda_ad_mono_polarized に
+# 決めるが、OptiX のライブラリ (libnvoptix.so.1) が無い環境では load_scene() が
+# "Could not initialize OptiX!" で落ちる。sionna.rt より前にバックエンドを
+# 選んでおく (OptiX が使えなければ LLVM にフォールバックする)。
+import os as _sc_os
+import sys as _sc_sys
+from ament_index_python.packages import get_package_share_directory as _sc_share
+_sc_sys.path.insert(0, _sc_os.path.join(_sc_share('gz_sionna'), 'src'))
+import sionna_compat as _sionna_compat
+_sionna_compat.select_backend()
+
 import sionna.rt
 import os
 import tf_transformations
@@ -36,6 +47,12 @@ from ament_index_python.packages import get_package_share_directory as _gz_share
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__),
     "..", "..", "control_jepa", "test"))
+# paths.py は gz_sionna/src に置いて全パッケージで共有している。
+# gz_sionna はまだ Python モジュールを install していないので share のパスを通す。
+import os as _p_os
+import sys as _p_sys
+from ament_index_python.packages import get_package_share_directory as _p_share
+_p_sys.path.insert(0, _p_os.path.join(_p_share('gz_sionna'), 'src'))
 from paths import output_path
 
 
@@ -46,10 +63,10 @@ def _gz_model(*parts):
 
 
 
-robot1_pos = Point(0,0,0)
-robot1_orien = Point(0,0,0)
+robot1_pos = Point(x=0.0, y=0.0, z=0.0)
+robot1_orien = Point(x=0.0, y=0.0, z=0.0)
 
-robot1_vel = Point(0,0,0)
+robot1_vel = Point(x=0.0, y=0.0, z=0.0)
 
 no_preview = False
 render_flag = 0
@@ -314,24 +331,21 @@ def main():
            
 
 
-        a, tau = paths.cir(normalize_delays=True,out_type="numpy") #out_type="numpy" normalize_delays=True,out_type="numpy"
-        # print("Shape of a: ", a.shape)
-        # print("Shape of tau: ", tau.shape)
+        # Sionna 2.x では cir_to_ofdm_channel が torch テンソルを要求する
+        # (PHY が PyTorch 化されたため)。out_type="numpy" のままだと
+        #   AttributeError: 'numpy.ndarray' object has no attribute 'dim'
+        # で落ちる。バッチ次元は下の reshape で足しているのでここでは型だけ。
+        a, tau = _sionna_compat.cir_for_ofdm(paths, normalize_delays=True)
         # t = tau.reshape(-1) / 1e-9          # ns
         # a_abs = np.abs(a).reshape(-1)
-        
-
-        a = a.reshape(1, *a.shape)
-        tau = tau.reshape(1, *tau.shape)
-
 
         # print("Shape of a: ", a.shape)
         # print("Shape of tau: ", tau.shape)
 
 
         h_freq = cir_to_ofdm_channel(frequencies, a, tau, normalize=False)
-        channels.append(h_freq.numpy().squeeze())
-        channel_np = h_freq.numpy().squeeze()
+        channels.append(_sionna_compat.to_numpy(h_freq).squeeze())
+        channel_np = _sionna_compat.to_numpy(h_freq).squeeze()
         # print(channel_np.shape , channel_np.dtype)
         
         # print(channel_np.shape)

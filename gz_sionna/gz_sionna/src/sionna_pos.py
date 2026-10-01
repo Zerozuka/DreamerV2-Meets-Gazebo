@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.10
+#!/usr/bin/env python3
 
 # ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
 # 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
@@ -7,11 +7,20 @@
 import ros1_compat as rospy
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
+# Sionna RT 2.x は import 時に mitsuba の variant を cuda_ad_mono_polarized に
+# 決めるが、OptiX のライブラリ (libnvoptix.so.1) が無い環境では load_scene() が
+# "Could not initialize OptiX!" で落ちる。sionna.rt より前にバックエンドを
+# 選んでおく (OptiX が使えなければ LLVM にフォールバックする)。
+import sionna_compat as _sionna_compat
+_sionna_compat.select_backend()
+
 import sionna.rt
 import os
 import tf_transformations
 import mitsuba as mi
-import sionna_vispy
+# sionna_vispy (サードパーティ) の import を削除した。Sionna 2.x 対応が
+# 未確認で、未導入だと ImportError になる。呼び出しは 147 行でコメントアウト
+# されており実際には使っていない。preview が必要になったら復活させる。
 
 
 import matplotlib.pyplot as plt
@@ -32,7 +41,7 @@ def _gz_model(*parts):
 # --------------------------------------------------------------------------
 
 robot1_pos = Point()
-robot2_pos = Point(0,0,0)
+robot2_pos = Point(x=0.0, y=0.0, z=0.0)
 
 robot1_orien = Point()
 robot2_orien = Point()

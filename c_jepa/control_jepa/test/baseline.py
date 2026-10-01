@@ -16,7 +16,9 @@ from dreamerv2.training.config_ import RacingCarConfig
 from tqdm.auto import tqdm
 import pickle
 import os
-from cv_bridge import CvBridge
+# cv_bridge は使わない。apt の cv_bridge_boost.so が NumPy 1 でコンパイル
+# されており NumPy 2 (sionna 2.x が要求) では画像変換が KeyError で落ちる。
+# 同等の変換を gz_sionna/src/ros_image.py に自前で持たせた (差分は docstring)。
 import cv2
 # ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
 # 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
@@ -40,6 +42,13 @@ from models.vit_encoder import ViTEncoder
 from models.vit_decoder import ViTDecoder
 from models.temporal_transformer import TemporalTransformer
 from utils.patch_utils import patches_to_image
+# paths.py は gz_sionna/src に置いて全パッケージで共有している。
+# gz_sionna はまだ Python モジュールを install していないので share のパスを通す。
+import os as _p_os
+import sys as _p_sys
+from ament_index_python.packages import get_package_share_directory as _p_share
+_p_sys.path.insert(0, _p_os.path.join(_p_share('gz_sionna'), 'src'))
+from ros_image import imgmsg_to_bgr8  # noqa: E402
 from paths import model_path, output_path
 
 
@@ -55,7 +64,6 @@ output_dir = output_path("baseline") + case_id
 _video_writers = {} 
 last_completed = None
 current_image = None
-bridge = CvBridge()
 channels = None
 
 step_2 = 0
@@ -156,7 +164,7 @@ class OdomPoseListener:
 # -------------------------
 def _image_callback(msg):
     global current_image
-    current_image = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    current_image = imgmsg_to_bgr8(msg)
 
 
 
@@ -266,7 +274,7 @@ def save_video_frame(img, path, fps=20):
 def image_callback1(msg):
     global prev_frame_global1
     path_ = output_dir + "Video/cam1.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global1 is None:
@@ -285,7 +293,7 @@ def image_callback1(msg):
 def image_callback2(msg):
     global prev_frame_global2
     path_ = output_dir + "Video/cam2.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global2 is None:
@@ -303,7 +311,7 @@ def image_callback2(msg):
 def image_callback3(msg):
     global prev_frame_global3
     path_ = output_dir + "Video/cam3.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global3 is None:
@@ -321,7 +329,7 @@ def image_callback3(msg):
 def image_callback4(msg):
     global prev_frame_global4
     path_ = output_dir + "Video/cam4.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global4 is None:
@@ -338,7 +346,7 @@ def image_callback4(msg):
 def image_callback5(msg):
     global prev_frame_global5
     path_ = output_dir + "Video/cam5.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global5 is None:

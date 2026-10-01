@@ -103,10 +103,53 @@ def Subscriber(topic, msg_type, callback, queue_size=10, **_ignored):
     return node.create_subscription(msg_type, topic, callback, queue_size)
 
 
+class _Publisher:
+    """rclpy の Publisher に rospy の publish() の呼び方を足したラッパ。
+
+    rospy は publish() にメッセージの中身を直接渡せた。呼び出し側には
+
+        done_pub.publish(1)          # std_msgs/Int32
+
+    のような書き方が 12 箇所ある。rclpy はメッセージ型のインスタンスしか
+    受け付けないので、そのままでは次で落ちる。
+
+        TypeError: Expected <class 'std_msgs.msg._int32.Int32'>, got <class 'int'>
+
+    さらに ROS 2 の生成メッセージクラスは keyword 引数しか取らないため、
+    rospy のように Int32(1) と書くこともできない。フィールド名を
+    get_fields_and_field_types() で引いて組み立てる。
+    """
+
+    def __init__(self, pub, msg_type):
+        self._pub = pub
+        self._msg_type = msg_type
+
+    def publish(self, *args, **kwargs):
+        if len(args) == 1 and not kwargs and isinstance(args[0], self._msg_type):
+            self._pub.publish(args[0])
+            return
+        if kwargs and not args:
+            self._pub.publish(self._msg_type(**kwargs))
+            return
+        # 位置引数はフィールドの宣言順に割り当てる (rospy と同じ)。
+        names = list(self._msg_type.get_fields_and_field_types().keys())
+        if len(args) > len(names):
+            raise TypeError(
+                f"{self._msg_type.__name__} のフィールドは {len(names)} 個だが "
+                f"{len(args)} 個渡された"
+            )
+        fields = dict(zip(names, args))
+        fields.update(kwargs)
+        self._pub.publish(self._msg_type(**fields))
+
+    def __getattr__(self, name):
+        return getattr(self._pub, name)
+
+
 def Publisher(topic, msg_type, queue_size=10, **_ignored):
     """rospy.Publisher の代替。publish() を持つオブジェクトを返す。"""
     node = _ensure_node()
-    return node.create_publisher(msg_type, topic, queue_size)
+    return _Publisher(node.create_publisher(msg_type, topic, queue_size), msg_type)
 
 
 def is_shutdown():

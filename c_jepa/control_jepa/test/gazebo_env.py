@@ -10,7 +10,9 @@ import cv2
 import numpy as np
 import rclpy
 import tf_transformations as tft
-from cv_bridge import CvBridge
+# cv_bridge は使わない。apt の cv_bridge_boost.so が NumPy 1 でコンパイル
+# されており NumPy 2 (sionna 2.x が要求) では画像変換が KeyError で落ちる。
+# 同等の変換を gz_sionna/src/ros_image.py に自前で持たせた (差分は docstring)。
 from geometry_msgs.msg import Twist
 from gymnasium import Env, spaces
 from nav_msgs.msg import Odometry
@@ -34,6 +36,7 @@ import matplotlib.pyplot as plt
 # 経由で解決して import する。衝突解消後は普通の import に直す。
 from ament_index_python.packages import get_package_share_directory
 sys.path.insert(0, os.path.join(get_package_share_directory('gz_sionna'), 'src'))
+from ros_image import imgmsg_to_bgr8  # noqa: E402
 from gz_world_control import GzWorldControl  # noqa: E402
 
 
@@ -88,7 +91,6 @@ class GazeboEnv(Env):
         self.robot_model_name = os.environ.get("GZ_ROBOT_NAME", "jetbot_1")
 
         # === Load trajectory ===
-        self.bridge = CvBridge()
         if path_file is None:
             path_file = _resolve_data_file(
                 "JEPA_PATH_POINTS", "path_points.csv",
@@ -1006,7 +1008,7 @@ class GazeboEnv(Env):
         self.current_pose = msg.pose.pose
 
     def _image_callback(self,msg):
-        self.img_src= self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        self.img_src= imgmsg_to_bgr8(msg)
         cleaned = cv2.GaussianBlur(self.img_src, (3,3), 0)
 
         self.current_image = cleaned #self.transform_image_cv2_dark(cleaned)  #(self.img_src.copy())
