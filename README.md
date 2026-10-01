@@ -344,7 +344,21 @@ Three terminals. Gazebo in the first, then:
 .venv/bin/python c_jepa/wireless_jepa/src/wireless_jepa.py
 ```
 
-Both need trained weights, which are not included in the repository.
+The C-JEPA side needs trained weights, which are not included in the repository. The W-JEPA side does not, and runs on its own against a live Gazebo:
+
+```text
+Gazebo ──/odom───────────┐
+                         ├──→ wireless_jepa.py (Sionna RT)
+C-JEPA ──/render_trigger─┘         │
+                                   ├──/channels (Float32MultiArray) ──→ C-JEPA
+                                   └──/render_done (Int32) ───────────→ C-JEPA
+```
+
+`wireless_jepa.py` places the transmitter at the robot's `/odom` pose inside the Sionna RT scene, traces paths, converts the CIR to an OFDM channel and publishes it. `/channels` carries 768 floats laid out as `(2 real/imag, 3 receivers, 8, 16 subcarriers)`. Measured on the development machine: `/channels` at 6.2 Hz, and a `/render_trigger` → `/render_done` round trip of 0.09–0.13 s.
+
+To check the coupling without trained weights, drive the robot and watch `/channels` change. Moving 1.68 m changed the channel by 1.8e-3, against a stationary ray-tracing jitter of 3.8e-7 — a factor of about 4600.
+
+`gz_sionna/src/sionna_pos.py` is the visualisation counterpart. It follows `/odom` the same way but writes PNGs instead of publishing: `img/scene_N.png` renders the scene with the traced paths, `graph/scene_N.png` plots the channel impulse response. It takes relative output paths, so run it from a directory that already contains `img/`, `img2/` and `graph/`.
 
 ---
 

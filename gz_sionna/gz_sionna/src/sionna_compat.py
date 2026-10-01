@@ -105,3 +105,21 @@ def cir_for_ofdm(paths, **kwargs):
     #     -> [1, ...]
     #   tau: [num_rx,num_tx,num_paths] -> [1, ...]
     return a.unsqueeze(0), tau.unsqueeze(0)
+
+
+def to_numpy(x):
+    """torch テンソルでも numpy 配列でも numpy 配列にして返す。
+
+    Sionna 2.x の PHY は torch テンソルを返す。CPU 版の torch なら呼び出し側の
+    .numpy() がそのまま通るが、CUDA 版では GPU 上のテンソルになるため
+
+        TypeError: can't convert cuda:0 device type tensor to numpy.
+        Use Tensor.cpu() to copy the tensor to host memory first.
+
+    で落ちる。requirements.lock は GPU 版 (cu129) を既定にしているので、
+    Sionna の戻り値を numpy にするときは必ずこれを通すこと。detach も挟むので
+    勾配を持つテンソルでも落ちない。
+    """
+    if hasattr(x, "detach"):
+        return x.detach().cpu().numpy()
+    return x

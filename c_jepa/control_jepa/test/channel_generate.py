@@ -81,7 +81,7 @@ def main():
     # model_states = data["latent_state"]
 
     if hasattr(poses, "numpy"):
-        poses_np = poses.numpy().astype(np.float32)
+        poses_np = _sionna_compat.to_numpy(poses).astype(np.float32)
     else:
         poses_np = np.array(poses, dtype=np.float32)
 
@@ -218,8 +218,8 @@ def main():
         # PyTorch 化され最初から torch テンソルが返るので往復は不要である。
         h_freq = cir_to_ofdm_channel(frequencies, a, tau, normalize=False)
         h_time = torch.fft.fft(h_freq)
-        channels.append(h_freq.numpy().squeeze())
-        channel_np = h_time.numpy().squeeze()
+        channels.append(_sionna_compat.to_numpy(h_freq).squeeze())
+        channel_np = _sionna_compat.to_numpy(h_time).squeeze()
         # channel_np = np.array(h_freq).squeeze()
         # print(channel_np.shape)
 

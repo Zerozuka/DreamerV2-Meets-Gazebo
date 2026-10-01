@@ -312,8 +312,8 @@ def main():
 
 
         h_freq = cir_to_ofdm_channel(frequencies, a, tau, normalize=False)
-        channels.append(h_freq.numpy().squeeze())
-        channel_np = h_freq.numpy().squeeze()
+        channels.append(_sionna_compat.to_numpy(h_freq).squeeze())
+        channel_np = _sionna_compat.to_numpy(h_freq).squeeze()
         # print(channel_np.shape , channel_np.dtype)
         
         # print(channel_np.shape)
