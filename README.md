@@ -290,7 +290,7 @@ Useful launch arguments:
 | Argument | Default | Meaning |
 | --- | --- | --- |
 | `gui` | `true` | `false` runs the server only |
-| `world` | `tellus3.world` | world file in `gz_sionna/worlds/` |
+| `world` | `tellus3.world` | world file in `gz_sionna/worlds/`; `empty.world` is flat and obstacle-free |
 | `robot_name` | `jetbot_1` | robot namespace |
 | `x_pos` `y_pos` `z_pos` `yaw` | on the track | spawn pose |
 | `bridge_sensors` | `true` | `false` drops camera and IMU from the bridge |
@@ -336,6 +336,19 @@ To just watch without steering, let it drive a fixed pattern or follow the recor
 **Expect it to stop partway.** `path_points.csv` is the course for `tellus3_with_road.world`, while the default `tellus3.world` is the bare Tellus building with its full mesh as collision geometry, pillars included. Measured from a clean launch, the robot follows the course for about 1.7 m and then stops dead against a pillar at `(5.07, 6.08)`. Started mid-course at point #42 it managed about 5 m before being pushed off. Parts of the course are clear and parts are not. This should resolve itself once the models missing from `tellus3_with_road.world` turn up; see [Known gaps](#known-gaps).
 
 Steering by hand is the reliable way to cover ground: the Jetbot has no obstacle avoidance and the arena is full of furniture.
+
+#### An empty world, if you just want to see the robot drive
+
+`tellus3.world` is the Tellus building, and it uses the whole building mesh as collision geometry, so there is something to bump into almost everywhere. When you want to watch the robot itself — or check a new robot, or separate a control problem from a collision problem — start in the flat one instead:
+
+```bash
+ros2 launch gz_sionna jetbot_tellus.launch.py \
+  world:=empty.world x_pos:=0.0 y_pos:=0.0 yaw:=0.0
+```
+
+A ground plane, a sun, and nothing else. Measured there: `/odom` at 28.0 Hz, `/image_raw2` at 28.7 Hz, GPU 34 %, and the robot drives from the origin to `(3.96, 5.19)` under `--demo` without touching anything.
+
+The world keeps the same name (`default`) and the same system plugins as `tellus3.world`, so `GazeboEnv`, the `gz-transport` wrappers and the sensor bridge all behave identically.
 
 `--no-follow` leaves the camera alone, `--speed` and `--turn` change how fast it goes, and `--back` / `--up` move the chase camera.
 
