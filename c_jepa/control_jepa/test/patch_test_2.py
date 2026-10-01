@@ -14,20 +14,26 @@ from dreamerv2.models.pixel import ObsDecoder, ObsEncoder
 import csv
 from gazebo_env import GazeboEnv
 from gazebo_wrappers import ImageEnv, OneHotAction
-from cv_bridge import CvBridge
 import time
 from dreamerv2.training.config_ import RacingCarConfig
 from tqdm.auto import tqdm
 import torch.distributions as dist
 from pathlib import Path
+# paths.py は gz_sionna/src に置いて全パッケージで共有している。
+# gz_sionna はまだ Python モジュールを install していないので share のパスを通す。
+import os as _p_os
+import sys as _p_sys
+from ament_index_python.packages import get_package_share_directory as _p_share
+_p_sys.path.insert(0, _p_os.path.join(_p_share('gz_sionna'), 'src'))
+from paths import model_path
 
 # ======================================================
 # CONFIG
 # ======================================================
-TEST_DATA_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/proposed_results.pt"
+TEST_DATA_PATH = model_path("masked_data", "proposed_results.pt")
 
-MODEL_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/trained_model/without_fix/patch_model.pt" #vae_mud_denoise  patch_model_3
-# DATA_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/proposed_results.pt"
+MODEL_PATH = model_path("masked_data", "trained_model", "without_fix", "patch_model.pt") #vae_mud_denoise  patch_model_3
+# DATA_PATH = model_path("masked_data", "proposed_results.pt")
 BATCH_SIZE = 64
 EPOCHS = 500
 LR = 1e-3
@@ -38,7 +44,7 @@ seed = 42
 MUD_COLOR = (14, 34, 49)  # BGR (OpenCV)
 
 BASE_MODEL_DIR = Path(
-    "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/trained_model"
+    model_path("masked_data", "trained_model")
 )
 PATCH_MODEL_PATHS = sorted(BASE_MODEL_DIR.rglob("patch_model.pt"))
 print(f"[INFO] Found {len(PATCH_MODEL_PATHS)} patch models")
@@ -630,7 +636,7 @@ def test():
 
     for vae_model_path in PATCH_MODEL_PATHS:
         print(f"[RUN] {vae_model_path}")
-        model_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/results/CarRacing-v2_0_pomdp/20_dec_gazebo/models_best_8.pth"  #31_oct_gym  7_nov_Gazebo
+        model_path = model_path("results", "CarRacing-v2_0_pomdp", "20_dec_gazebo", "models_best_8.pth")  #31_oct_gym  7_nov_Gazebo
         config = RacingCarConfig(capacity=1)
         RSSMModel, ObsEncoderModel, ActionModel = load_model(config, model_path, "cpu")
 

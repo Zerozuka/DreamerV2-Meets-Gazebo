@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  復元したラッパー。メッシュは上流同梱の models/tower/radio_tower.obj を
+  そのまま参照しており、ファイルは複製していない。
+
+  world 側は 2 箇所に z=3.308903 で include している
+  (tellus3_with_road.world の 379 行と 385 行)。構造物なので static。
+
+  radio_tower.obj は 2.5 MB あり、衝突形状に使うと物理演算で重い。ロボットが
+  接触する想定のない位置に置かれているなら、collision を簡略形状に置き換える
+  か削除してよい。
+-->
+<sdf version="1.7">
+  <model name="radio_tower_">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://tower/radio_tower.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://tower/radio_tower.obj</uri>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

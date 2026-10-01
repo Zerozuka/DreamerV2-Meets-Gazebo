@@ -13,10 +13,28 @@ import os
 import cv2
 import argparse
 import minatar
-import rospy
+# ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
+# 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
+# 検証できないため、意味を保つ層を挟んで呼び出し側を無改修にしている。
+# 詳細は gz_sionna/src/ros1_compat.py の docstring を参照。
+#
+# gz_sionna はまだ Python モジュールを install していない (dreamerv2 / utils の
+# 名前衝突を解消するまで packages=[] のため) ので share のパスを通す。
+import os as _os
+import sys as _sys
+from ament_index_python.packages import get_package_share_directory as _share
+_sys.path.insert(0, _os.path.join(_share('gz_sionna'), 'src'))
+import ros1_compat as rospy
 
 from gazebo_env import GazeboEnv
 from gazebo_wrappers import ImageEnv, OneHotAction
+# paths.py は gz_sionna/src に置いて全パッケージで共有している。
+# gz_sionna はまだ Python モジュールを install していないので share のパスを通す。
+import os as _p_os
+import sys as _p_sys
+from ament_index_python.packages import get_package_share_directory as _p_share
+_p_sys.path.insert(0, _p_os.path.join(_p_share('gz_sionna'), 'src'))
+from paths import model_path
 
 
 # import tensorflow as tf
@@ -118,7 +136,7 @@ def main(args):
     model_dir = os.path.join(result_dir, 'models')                                                  #dir to save learnt models
     os.makedirs(model_dir, exist_ok=True)
 
-    env = GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv")
+    env = GazeboEnv()
 
     env = ImageEnv(env, skip_frames=3, stack_frames=4, initial_no_op=5)
     env = OneHotAction(env)
@@ -166,7 +184,7 @@ def main(args):
     trainer = Trainer(config, device)
     evaluator = Evaluator(config, device)
 
-    pretrained_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/results/CarRacing-v2_0_pomdp/models/models_best_based.pth"
+    pretrained_path = model_path("results", "CarRacing-v2_0_pomdp", "models", "models_best_based.pth")
     if os.path.exists(pretrained_path):
         print(f"Loading pretrained model from {pretrained_path}")
         saved_dict = torch.load(pretrained_path, map_location=device)

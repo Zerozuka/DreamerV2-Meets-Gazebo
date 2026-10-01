@@ -1,11 +1,33 @@
-#!/usr/bin/env python3.10
+#!/usr/bin/env python3
 
-import rospy
+# ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
+# 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
+# 検証できないため、意味を保つ層を挟んで呼び出し側を無改修にしている。
+# 詳細は gz_sionna/src/ros1_compat.py の docstring を参照。
+#
+# gz_sionna はまだ Python モジュールを install していない (dreamerv2 / utils の
+# 名前衝突を解消するまで packages=[] のため) ので share のパスを通す。
+import os as _os
+import sys as _sys
+from ament_index_python.packages import get_package_share_directory as _share
+_sys.path.insert(0, _os.path.join(_share('gz_sionna'), 'src'))
+import ros1_compat as rospy
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
+# Sionna RT 2.x は import 時に mitsuba の variant を cuda_ad_mono_polarized に
+# 決めるが、OptiX のライブラリ (libnvoptix.so.1) が無い環境では load_scene() が
+# "Could not initialize OptiX!" で落ちる。sionna.rt より前にバックエンドを
+# 選んでおく (OptiX が使えなければ LLVM にフォールバックする)。
+import os as _sc_os
+import sys as _sc_sys
+from ament_index_python.packages import get_package_share_directory as _sc_share
+_sc_sys.path.insert(0, _sc_os.path.join(_sc_share('gz_sionna'), 'src'))
+import sionna_compat as _sionna_compat
+_sionna_compat.select_backend()
+
 import sionna.rt
 import os
-import tf
+import tf_transformations
 import mitsuba as mi
 from std_msgs.msg import Float32MultiArray,MultiArrayDimension
 from std_msgs.msg import Int32
@@ -17,11 +39,34 @@ import numpy as np
 from sionna.rt import load_scene, PlanarArray, Transmitter, Receiver, Camera,PathSolver, RadioMapSolver, subcarrier_frequencies, ITURadioMaterial, SceneObject
 from sionna.phy.channel import subcarrier_frequencies , cir_to_ofdm_channel
 
+# --- リポジトリ内資産のパス解決 -------------------------------------------
+# 元は開発者の home を指す絶対パス (/home/icon-group/...) がハードコードされて
+# いたが、実体は gz_sionna パッケージに同梱されている。ament_index で share の
+# 位置を引いて組み立てる。
+from ament_index_python.packages import get_package_share_directory as _gz_share
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__),
+    "..", "..", "control_jepa", "test"))
+# paths.py は gz_sionna/src に置いて全パッケージで共有している。
+# gz_sionna はまだ Python モジュールを install していないので share のパスを通す。
+import os as _p_os
+import sys as _p_sys
+from ament_index_python.packages import get_package_share_directory as _p_share
+_p_sys.path.insert(0, _p_os.path.join(_p_share('gz_sionna'), 'src'))
+from paths import output_path
 
-robot1_pos = Point(0,0,0)
-robot1_orien = Point(0,0,0)
 
-robot1_vel = Point(0,0,0)
+def _gz_model(*parts):
+    """gz_sionna の models/ 配下のパスを返す。"""
+    return os.path.join(_gz_share("gz_sionna"), "models", *parts)
+# --------------------------------------------------------------------------
+
+
+
+robot1_pos = Point(x=0.0, y=0.0, z=0.0)
+robot1_orien = Point(x=0.0, y=0.0, z=0.0)
+
+robot1_vel = Point(x=0.0, y=0.0, z=0.0)
 
 no_preview = False
 render_flag = 0
@@ -36,7 +81,7 @@ def odom_callback1(msg):
     q = msg.pose.pose.orientation
     quaternion = (q.x, q.y, q.z, q.w)
 
-    roll, pitch, yaw = tf.transformations.euler_from_quaternion(quaternion)
+    roll, pitch, yaw = tf_transformations.euler_from_quaternion(quaternion)
 
     robot1_orien.x = roll
     robot1_orien.y = pitch
@@ -66,15 +111,15 @@ def main():
     done_pub = rospy.Publisher("/render_done", Int32, queue_size=10)
     rospy.loginfo("Subscribed to /robot_position")
 
-    scene = load_scene("/home/icon-group/Documents/Josh/sionna/Tellus/sionna_test/with_materials/untitled.xml") 
-    car_path = "/home/icon-group/Documents/Josh/sionna/Tellus/sionna_test/jetbot_real/jet.obj"
-    cube_path = "/home/icon-group/Documents/Josh/sionna/Tellus/sionna_test/jepa_objects/cube.obj"
-    ball_path = "/home/icon-group/Documents/Josh/sionna/Tellus/sionna_test/jepa_objects/ball.obj"
-    cylinder_path = "/home/icon-group/Documents/Josh/sionna/Tellus/sionna_test/jepa_objects/cylinder.obj"
+    scene = load_scene(_gz_model("with_materials", "untitled.xml")) 
+    car_path = _gz_model("jetbot_real", "jet.obj")
+    cube_path = _gz_model("jepa_objects", "cube.obj")
+    ball_path = _gz_model("jepa_objects", "ball.obj")
+    cylinder_path = _gz_model("jepa_objects", "cylinder.obj")
 
 
 
-    output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/Proposed/case_0/"
+    output_dir = output_path("Proposed", "case_0")
     os.makedirs(output_dir, exist_ok=True)
 
     cube_material = ITURadioMaterial(
@@ -286,24 +331,21 @@ def main():
            
 
 
-        a, tau = paths.cir(normalize_delays=True,out_type="numpy") #out_type="numpy" normalize_delays=True,out_type="numpy"
-        # print("Shape of a: ", a.shape)
-        # print("Shape of tau: ", tau.shape)
+        # Sionna 2.x では cir_to_ofdm_channel が torch テンソルを要求する
+        # (PHY が PyTorch 化されたため)。out_type="numpy" のままだと
+        #   AttributeError: 'numpy.ndarray' object has no attribute 'dim'
+        # で落ちる。バッチ次元は下の reshape で足しているのでここでは型だけ。
+        a, tau = _sionna_compat.cir_for_ofdm(paths, normalize_delays=True)
         # t = tau.reshape(-1) / 1e-9          # ns
         # a_abs = np.abs(a).reshape(-1)
-        
-
-        a = a.reshape(1, *a.shape)
-        tau = tau.reshape(1, *tau.shape)
-
 
         # print("Shape of a: ", a.shape)
         # print("Shape of tau: ", tau.shape)
 
 
         h_freq = cir_to_ofdm_channel(frequencies, a, tau, normalize=False)
-        channels.append(h_freq.numpy().squeeze())
-        channel_np = h_freq.numpy().squeeze()
+        channels.append(_sionna_compat.to_numpy(h_freq).squeeze())
+        channel_np = _sionna_compat.to_numpy(h_freq).squeeze()
         # print(channel_np.shape , channel_np.dtype)
         
         # print(channel_np.shape)

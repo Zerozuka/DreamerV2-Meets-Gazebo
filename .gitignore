@@ -1,0 +1,13 @@
+# colcon のビルド成果物
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# uv が作る仮想環境
+.venv/

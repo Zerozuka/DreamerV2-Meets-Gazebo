@@ -6,12 +6,19 @@ import cv2
 import numpy as np
 import random
 import matplotlib.pyplot as plt
+# paths.py は gz_sionna/src に置いて全パッケージで共有している。
+# gz_sionna はまだ Python モジュールを install していないので share のパスを通す。
+import os as _p_os
+import sys as _p_sys
+from ament_index_python.packages import get_package_share_directory as _p_share
+_p_sys.path.insert(0, _p_os.path.join(_p_share('gz_sionna'), 'src'))
+from paths import model_path
 
 # ======================================================
 # CONFIG
 # ======================================================
-TEST_DATA_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/proposed_results_2.pt"
-MODEL_PATH = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/trained_model/patch_model2.pt"
+TEST_DATA_PATH = model_path("masked_data", "proposed_results_2.pt")
+MODEL_PATH = model_path("masked_data", "trained_model", "patch_model2.pt")
 BATCH_SIZE = 1
 NUM_SAMPLES_TO_SHOW = 10
 

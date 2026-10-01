@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding: utf-8
 
 import gymnasium as gym
@@ -8,26 +8,46 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from gazebo_env import GazeboEnv
-import rospy
+# ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
+# 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
+# 検証できないため、意味を保つ層を挟んで呼び出し側を無改修にしている。
+# 詳細は gz_sionna/src/ros1_compat.py の docstring を参照。
+#
+# gz_sionna はまだ Python モジュールを install していない (dreamerv2 / utils の
+# 名前衝突を解消するまで packages=[] のため) ので share のパスを通す。
+import os as _os
+import sys as _sys
+from ament_index_python.packages import get_package_share_directory as _share
+_sys.path.insert(0, _os.path.join(_share('gz_sionna'), 'src'))
+import ros1_compat as rospy
 from nav_msgs.msg import Odometry
 from threading import Lock
 from wutils.models import Encoder, Predictor, PowerPredictor 
 from std_msgs.msg import Float32MultiArray,MultiArrayDimension,Int32
 import time
 import os
-from cv_bridge import CvBridge
+# cv_bridge は使わない。apt の cv_bridge_boost.so が NumPy 1 でコンパイル
+# されており NumPy 2 (sionna 2.x が要求) では画像変換が KeyError で落ちる。
+# 同等の変換を gz_sionna/src/ros_image.py に自前で持たせた (差分は docstring)。
 from sensor_msgs.msg import Image
 from rosgraph_msgs.msg import Clock
+# paths.py は gz_sionna/src に置いて全パッケージで共有している。
+# gz_sionna はまだ Python モジュールを install していないので share のパスを通す。
+import os as _p_os
+import sys as _p_sys
+from ament_index_python.packages import get_package_share_directory as _p_share
+_p_sys.path.insert(0, _p_os.path.join(_p_share('gz_sionna'), 'src'))
+from ros_image import imgmsg_to_bgr8  # noqa: E402
+from paths import output_path
 
 
 
-csv_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/predicted_power_log.csv"
+csv_path = output_path("predicted_power_log.csv")
 case_id = "case_8/"
-output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/baseline_dqn/" + case_id
+output_dir = output_path("baseline_dqn") + case_id
 _video_writers = {} 
 last_completed = None
 current_image = None
-bridge = CvBridge()
 channels = None
 
 prev_frame_global1 = None
@@ -145,7 +165,7 @@ class OdomPoseListener:
 # -------------------------
 def _image_callback(msg):
     global current_image
-    current_image = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    current_image = imgmsg_to_bgr8(msg)
 
 
 
@@ -198,7 +218,7 @@ def save_video_frame(img, path, fps=20):
 def image_callback1(msg):
     global prev_frame_global1
     path_ = output_dir + "Video/cam1.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global1 is None:
@@ -217,7 +237,7 @@ def image_callback1(msg):
 def image_callback2(msg):
     global prev_frame_global2
     path_ = output_dir + "Video/cam2.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global2 is None:
@@ -235,7 +255,7 @@ def image_callback2(msg):
 def image_callback3(msg):
     global prev_frame_global3
     path_ = output_dir + "Video/cam3.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global3 is None:
@@ -253,7 +273,7 @@ def image_callback3(msg):
 def image_callback4(msg):
     global prev_frame_global4
     path_ = output_dir + "Video/cam4.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global4 is None:
@@ -270,7 +290,7 @@ def image_callback4(msg):
 def image_callback5(msg):
     global prev_frame_global5
     path_ = output_dir + "Video/cam5.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global5 is None:
@@ -313,7 +333,7 @@ if __name__ == "__main__":
 
     MODEL_PATH = "training/gazebo/gazebo_step_230000.pt"    #gazebo_step_50000 gazebo_best
 
-    env = ImageEnv(GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv"))
+    env = ImageEnv(GazeboEnv())
 
     state_dim = (4, 84, 84)
     action_dim = env.action_space.n

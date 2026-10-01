@@ -11,14 +11,27 @@ import matplotlib.pyplot as plt
 import csv
 from gazebo_env import GazeboEnv
 from gazebo_wrappers import ImageEnv, OneHotAction
-from cv_bridge import CvBridge
+# cv_bridge は使わない。apt の cv_bridge_boost.so が NumPy 1 でコンパイル
+# されており NumPy 2 (sionna 2.x が要求) では画像変換が KeyError で落ちる。
+# 同等の変換を gz_sionna/src/ros_image.py に自前で持たせた (差分は docstring)。
 import time
 from dreamerv2.training.config_ import RacingCarConfig
 from tqdm.auto import tqdm
 import pickle
 import os
 import cv2
-import rospy
+# ROS 1 の rospy を rclpy の上に再現する移植用の層に差し替えている。
+# 本来はこのスクリプト自身が Node を持つべきだが、学習済み重みが無くて実行
+# 検証できないため、意味を保つ層を挟んで呼び出し側を無改修にしている。
+# 詳細は gz_sionna/src/ros1_compat.py の docstring を参照。
+#
+# gz_sionna はまだ Python モジュールを install していない (dreamerv2 / utils の
+# 名前衝突を解消するまで packages=[] のため) ので share のパスを通す。
+import os as _os
+import sys as _sys
+from ament_index_python.packages import get_package_share_directory as _share
+_sys.path.insert(0, _os.path.join(_share('gz_sionna'), 'src'))
+import ros1_compat as rospy
 import pandas as pd 
 from nav_msgs.msg import Odometry
 from threading import Lock
@@ -30,15 +43,23 @@ from numpy.linalg import norm
 import torch.nn.functional as F
 import random
 import torch.distributions as dist
+# paths.py は gz_sionna/src に置いて全パッケージで共有している。
+# gz_sionna はまだ Python モジュールを install していないので share のパスを通す。
+import os as _p_os
+import sys as _p_sys
+from ament_index_python.packages import get_package_share_directory as _p_share
+_p_sys.path.insert(0, _p_os.path.join(_p_share('gz_sionna'), 'src'))
+from ros_image import imgmsg_to_bgr8  # noqa: E402
+from paths import model_path, output_path
 
 
 MUD_COLOR = (14, 34, 49) #(50,50,47) #(14, 34, 49)  # BGR (OpenCV)
 episode_id = 0
 seed = 42
 
-csv_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/predicted_power_log.csv"
+csv_path = output_path("predicted_power_log.csv")
 case_id = "case_0/"
-output_dir = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/Proposed/" + case_id
+output_dir = output_path("Proposed") + case_id
 datapath = output_dir + "proposed_results.pt"
 datapath_2 = output_dir + "z_val_.pt"
 _video_writers = {} 
@@ -53,7 +74,6 @@ prev_frame_global5 = None
 mean_val = 0.009106356651
 var_val = 0.2119901876
 
-bridge = CvBridge()
 if os.path.exists(csv_path):
     os.remove(csv_path)
 
@@ -192,7 +212,7 @@ def save_video_frame(img, path, fps=15):
 def image_callback1(msg):
     global prev_frame_global1
     path_ = output_dir + "Video/cam1.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global1 is None:
@@ -211,7 +231,7 @@ def image_callback1(msg):
 def image_callback2(msg):
     global prev_frame_global2
     path_ = output_dir + "Video/cam2.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global2 is None:
@@ -229,7 +249,7 @@ def image_callback2(msg):
 def image_callback3(msg):
     global prev_frame_global3
     path_ = output_dir + "Video/cam3.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global3 is None:
@@ -247,7 +267,7 @@ def image_callback3(msg):
 def image_callback4(msg):
     global prev_frame_global4
     path_ = output_dir + "Video/cam4.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global4 is None:
@@ -264,7 +284,7 @@ def image_callback4(msg):
 def image_callback5(msg):
     global prev_frame_global5
     path_ = output_dir + "Video/cam5.mp4" 
-    img = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    img = imgmsg_to_bgr8(msg)
     # img = cv2.resize(img, (640, 480))
 
     if prev_frame_global5 is None:
@@ -1073,10 +1093,10 @@ if __name__ == "__main__":
 
     device = "cpu"
     # model_path = "path/to/saved_model.pth"
-    model_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/results/CarRacing-v2_0_pomdp/20_dec_gazebo/models_best_8.pth"  #31_oct_gym  7_nov_Gazebo
-    wmodel_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/wireless_models/3_bs/wi-jepa_"
-    vae_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/masked_data/trained_model/50/834/patch_model.pt"   #old_trained_model/without_fix/patch_model.pt"     #trained_model/500/1502/patch_model.pt  #old_trained_model 
-    env = GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv")
+    model_path = model_path("results", "CarRacing-v2_0_pomdp", "20_dec_gazebo", "models_best_8.pth")  #31_oct_gym  7_nov_Gazebo
+    wmodel_path = model_path("wireless_models", "3_bs", "wi-jepa_")
+    vae_path = model_path("masked_data", "trained_model", "50", "834", "patch_model.pt")   #old_trained_model/without_fix/patch_model.pt"     #trained_model/500/1502/patch_model.pt  #old_trained_model 
+    env = GazeboEnv()
 
     vae_model = VAE().to(device)
     vae_model.load_state_dict(torch.load(vae_path, map_location=device))

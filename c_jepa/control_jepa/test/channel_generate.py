@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.10
+#!/usr/bin/env python3
 import os
 if os.getenv("CUDA_VISIBLE_DEVICES") is None:
     gpu_num = 0 # Use "" to use the CPU
@@ -6,6 +6,17 @@ if os.getenv("CUDA_VISIBLE_DEVICES") is None:
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import torch
+# Sionna RT 2.x は import 時に mitsuba の variant を cuda_ad_mono_polarized に
+# 決めるが、OptiX のライブラリ (libnvoptix.so.1) が無い環境では load_scene() が
+# "Could not initialize OptiX!" で落ちる。sionna.rt より前にバックエンドを
+# 選んでおく (OptiX が使えなければ LLVM にフォールバックする)。
+import os as _sc_os
+import sys as _sc_sys
+from ament_index_python.packages import get_package_share_directory as _sc_share
+_sc_sys.path.insert(0, _sc_os.path.join(_sc_share('gz_sionna'), 'src'))
+import sionna_compat as _sionna_compat
+_sionna_compat.select_backend()
+
 import sionna.rt
 import os
 import mitsuba as mi
@@ -24,6 +35,26 @@ from gazebo_env import GazeboEnv
 from gazebo_wrappers import ImageEnv, OneHotAction
 from dreamerv2.training.config_ import RacingCarConfig
 
+# --- リポジトリ内資産のパス解決 -------------------------------------------
+# 元は開発者の home を指す絶対パス (/home/icon-group/...) がハードコードされて
+# いたが、実体は gz_sionna パッケージに同梱されている。ament_index で share の
+# 位置を引いて組み立てる。
+from ament_index_python.packages import get_package_share_directory as _gz_share
+# paths.py は gz_sionna/src に置いて全パッケージで共有している。
+# gz_sionna はまだ Python モジュールを install していないので share のパスを通す。
+import os as _p_os
+import sys as _p_sys
+from ament_index_python.packages import get_package_share_directory as _p_share
+_p_sys.path.insert(0, _p_os.path.join(_p_share('gz_sionna'), 'src'))
+from paths import model_path, output_path
+
+
+def _gz_model(*parts):
+    """gz_sionna の models/ 配下のパスを返す。"""
+    return os.path.join(_gz_share("gz_sionna"), "models", *parts)
+# --------------------------------------------------------------------------
+
+
 no_preview = False
 
 
@@ -39,10 +70,10 @@ def main():
     robot1_pos = Point()
     robot1_orien = Point()
 
-    scene = load_scene("/home/icon-group/Documents/Josh/sionna/Tellus/sionna_test/with_materials/untitled.xml") 
-    car_path = "/home/icon-group/Documents/Josh/sionna/Tellus/sionna_test/jetbot_real/jet.obj"
-    dataset_file = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/Proposed/case_0/proposed_results.pt"
-    save_file = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/Proposed/case_0/"
+    scene = load_scene(_gz_model("with_materials", "untitled.xml")) 
+    car_path = _gz_model("jetbot_real", "jet.obj")
+    dataset_file = model_path("Proposed", "case_0", "proposed_results.pt")
+    save_file = output_path("Proposed", "case_0")
 
 
     data = torch.load(dataset_file, map_location="cpu",weights_only=False)
@@ -50,7 +81,7 @@ def main():
     # model_states = data["latent_state"]
 
     if hasattr(poses, "numpy"):
-        poses_np = poses.numpy().astype(np.float32)
+        poses_np = _sionna_compat.to_numpy(poses).astype(np.float32)
     else:
         poses_np = np.array(poses, dtype=np.float32)
 
@@ -170,26 +201,25 @@ def main():
            
 
 
-        a, tau = paths.cir(normalize_delays=True,out_type="numpy") #out_type="numpy" normalize_delays=True,out_type="numpy"
-        print("Shape of a: ", a.shape)
-        print("Shape of tau: ", tau.shape)
+        # Sionna 2.x では cir_to_ofdm_channel が torch テンソルとバッチ次元を
+        # 要求する (PHY が PyTorch 化されたため)。out_type="numpy" のままだと
+        #   AttributeError: 'numpy.ndarray' object has no attribute 'dim'
+        # で落ちる。型合わせとバッチ次元の追加は sionna_compat に寄せている。
+        a, tau = _sionna_compat.cir_for_ofdm(paths, normalize_delays=True)
         # t = tau.reshape(-1) / 1e-9          # ns
         # a_abs = np.abs(a).reshape(-1)
-        
-
-        a = a.reshape(1, *a.shape)
-        tau = tau.reshape(1, *tau.shape)
-
 
         print("Shape of a: ", a.shape)
         print("Shape of tau: ", tau.shape)
 
 
-        h_freq_tf = cir_to_ofdm_channel(frequencies, a, tau, normalize=False)
-        h_freq = torch.from_numpy(h_freq_tf.numpy())
+        # Sionna 1.x では cir_to_ofdm_channel が TensorFlow のテンソルを返すため
+        # torch.from_numpy(....numpy()) で変換していた。2.x では PHY が
+        # PyTorch 化され最初から torch テンソルが返るので往復は不要である。
+        h_freq = cir_to_ofdm_channel(frequencies, a, tau, normalize=False)
         h_time = torch.fft.fft(h_freq)
-        channels.append(h_freq.numpy().squeeze())
-        channel_np = h_time.numpy().squeeze()
+        channels.append(_sionna_compat.to_numpy(h_freq).squeeze())
+        channel_np = _sionna_compat.to_numpy(h_time).squeeze()
         # channel_np = np.array(h_freq).squeeze()
         # print(channel_np.shape)
 
@@ -233,7 +263,7 @@ def main():
                          resolution=[650,500],
                          paths =paths);
 
-    # save_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/baseline/channel_baseline_case_8.pt" 
+    # save_path = model_path("baseline", "channel_baseline_case_8.pt") 
     # torch.save(dataset, save_path)
     # print(f"Saved dataset with channels → {save_path}")
 

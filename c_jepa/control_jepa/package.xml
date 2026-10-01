@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>control_jepa</name>
+  <version>0.0.0</version>
+  <description>Control-JEPA。Gazebo の観測とロボット動力学から制御表現を学習する</description>
+
+  <maintainer email="icon-group@todo.todo">icon-group</maintainer>
+
+  <!-- upstream (ICONgroupCWC/DreamerV2-Meets-Gazebo) にライセンス表記が
+       ないため TODO のまま残している。著者への確認待ち。 -->
+  <license>TODO</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <!-- ROS 1 の tf.transformations の後継。euler_from_quaternion と
+       quaternion_from_euler のみ使用している。 -->
+  <exec_depend>tf_transformations</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <!-- cv_bridge はあえて宣言していない。apt の cv_bridge_boost.so が NumPy 1 で
+       コンパイルされており、sionna 2.x が要求する NumPy 2 では画像変換が落ちる。
+       同等の変換を gz_sionna/src/ros_image.py に自前で持たせて依存を外した。 -->
+
+  <!-- gazebo_msgs はあえて宣言していない。gazebo_env.py が現在使っている
+       /gazebo/set_model_state などの Classic 固有サービスは Harmonic に
+       存在せず、gz-transport への移行で依存ごと消えるため。 -->
+
+  <!-- torch, gymnasium は rosdep のキーがないため package.xml に書けない。
+       requirements 側で管理する (依存刷新の issue を参照)。 -->
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

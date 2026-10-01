@@ -1,23 +1,80 @@
 #!/usr/bin/env python3
-import rospy
-import numpy as np
-import math
 import csv
+import math
+import os
+import sys
+import threading
 import time
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
+
 import cv2
+import numpy as np
+import rclpy
+import tf_transformations as tft
+# cv_bridge は使わない。apt の cv_bridge_boost.so が NumPy 1 でコンパイル
+# されており NumPy 2 (sionna 2.x が要求) では画像変換が KeyError で落ちる。
+# 同等の変換を gz_sionna/src/ros_image.py に自前で持たせた (差分は docstring)。
 from geometry_msgs.msg import Twist
+from gymnasium import Env, spaces
 from nav_msgs.msg import Odometry
-import tf.transformations as tft
-from gymnasium import Env
-from gymnasium import spaces
-from std_srvs.srv import Empty
-from gazebo_msgs.srv import SetModelState
-from gazebo_msgs.msg import ModelState
+from rclpy.duration import Duration
+from rclpy.executors import SingleThreadedExecutor
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from sensor_msgs.msg import Image
+
 import matplotlib.pyplot as plt
-from gymnasium import spaces
-from gazebo_msgs.srv import GetPhysicsProperties
+
+# Gazebo Harmonic では gazebo_msgs の以下が使えない。gz-transport を叩く
+# ラッパー (gz_sionna/src/gz_world_control.py) に置き換えた。
+#
+#   gazebo_msgs.srv.SetModelState        -> GzWorldControl.set_pose
+#   gazebo_msgs.srv.GetPhysicsProperties -> 廃止 (max_step_size は設定値)
+#   std_srvs.srv.Empty (pause/unpause)   -> GzWorldControl.pause / unpause
+#
+# gz_sionna はまだ Python モジュールを install していない (dreamerv2 / utils の
+# 名前衝突を解消するまで packages=[] のため) ので、share のパスを ament_index
+# 経由で解決して import する。衝突解消後は普通の import に直す。
+from ament_index_python.packages import get_package_share_directory
+sys.path.insert(0, os.path.join(get_package_share_directory('gz_sionna'), 'src'))
+from ros_image import imgmsg_to_bgr8  # noqa: E402
+from gz_world_control import GzWorldControl  # noqa: E402
+
+
+def _resolve_data_file(env_var, filename, description):
+    """コースデータ CSV のパスを解決する。
+
+    元は開発者の home を指す絶対パス (/home/icon-group/catkin_ws/src/...) が
+    ハードコードされていて、他のマシンでは動かなかった。次の順で探す。
+
+      1. 環境変数 env_var        別のコースを使いたいとき
+      2. gz_sionna の config/    同梱の Tellus コース (既定)
+      3. カレントディレクトリ    手元で差し替えたいとき
+
+    通常は 2 で解決するので、環境変数を設定しなくても GazeboEnv() が動く。
+    """
+    path = os.environ.get(env_var)
+    if path:
+        if not os.path.exists(path):
+            raise FileNotFoundError(
+                f"{env_var}={path} が指すファイルが存在しない ({description})"
+            )
+        return path
+
+    packaged = os.path.join(
+        get_package_share_directory('gz_sionna'), 'config', filename)
+    if os.path.exists(packaged):
+        return packaged
+
+    local = os.path.join(os.getcwd(), filename)
+    if os.path.exists(local):
+        return local
+
+    raise FileNotFoundError(
+        f"{description} が見つからない。\n"
+        f"  想定した場所: {packaged}\n"
+        f"  環境変数 {env_var} にパスを設定するか、\n"
+        f"  カレントディレクトリに {filename} を置くこと。"
+    )
 import random
 import torch
 
@@ -26,10 +83,18 @@ MUD_COLOR = (0, 0, 0)
 
 
 class GazeboEnv(Env):
-    def __init__(self, path_file, robot_ns=""):
+    def __init__(self, path_file=None, robot_ns=""):
         super(GazeboEnv, self).__init__()
+
+        # Gazebo Harmonic の world 制御。Classic の /gazebo/* サービスの代替。
+        self.gz = GzWorldControl(world=os.environ.get("GZ_WORLD", "default"))
+        self.robot_model_name = os.environ.get("GZ_ROBOT_NAME", "jetbot_1")
+
         # === Load trajectory ===
-        self.bridge = CvBridge()
+        if path_file is None:
+            path_file = _resolve_data_file(
+                "JEPA_PATH_POINTS", "path_points.csv",
+                "経路点の CSV (列 x, y, yaw)")
         self.path = self._load_path(path_file)
         self.lookahead_distance = 0.5
         self.goal_tolerance = 0.15
@@ -56,19 +121,76 @@ class GazeboEnv(Env):
 
 
 
-        self.cmd_pub = rospy.Publisher(f"{robot_ns}/cmd_vel", Twist, queue_size=10)
+        # === ROS 2 ノードと executor ===
+        #
+        # rospy は Subscriber を作るだけでバックグラウンドスレッドが
+        # コールバックを回してくれたが、rclpy は executor が spin しない限り
+        # コールバックが一切呼ばれない。
+        #
+        # reset() は「コールバックで画像と odom が届くまで待つ」構造
+        # (current_pose / current_image が None の間ループ) なので、
+        # 単一スレッドで spin すると待ちループが executor をブロックして
+        # 永久にデッドロックする。
+        #
+        # そこで executor を別スレッドで回し、step() / reset() は従来どおり
+        # 同期的に書けるようにしている。
+        #
+        # SingleThreadedExecutor で足りる。デッドロックを避けるのに必要なのは
+        # 「executor が待ちループとは別のスレッドで回ること」だけで、
+        # コールバック同士の並行性は使っていない (どちらも参照の代入のみ)。
+        # MultiThreadedExecutor は内部の ThreadPoolExecutor が終了時に
+        # "cannot use Destroyable because destruction was requested" を
+        # 出すので避けている。
+        #
+        # コールバックは executor スレッド側で走るため、_odom_callback /
+        # _image_callback が書き込む current_pose / current_image には別
+        # スレッドから触ることになる。参照の代入だけなので GIL の範囲で安全
+        # (部分更新は起きない)。
+        if not rclpy.ok():
+            rclpy.init()
 
-        rospy.Subscriber(f"{robot_ns}/odom", Odometry, self._odom_callback)
-        rospy.Subscriber(f"{robot_ns}/image_raw2", Image, self._image_callback)
-        
-        
+        node_name = f"gazebo_env{robot_ns.replace('/', '_')}" if robot_ns else "gazebo_env"
+        self.node = Node(node_name)
+        self._owns_context = True
 
+        # rospy.sleep は /use_sim_time が有効なとき sim 時間で待っていた。
+        # _sleep() が同じ意味になるよう、ノードのクロックを sim 時間に切り替える。
+        # これを設定しないと get_clock() が壁時計を返し、実時間係数が 1 を
+        # 下回る環境では 1 step で進む sim 時間が想定より短くなる。
+        #
+        # 環境変数 JEPA_USE_SIM_TIME=0 で無効化できる。Gazebo を動かさずに
+        # 報酬ロジックだけ試すときなど、/clock が来ない状況では壁時計の方が
+        # 都合がよい (sim 時間だと _sleep が打ち切りまで待つ)。
+        use_sim_time = os.environ.get("JEPA_USE_SIM_TIME", "1") not in ("0", "false", "False")
+        self.node.set_parameters([
+            rclpy.parameter.Parameter(
+                "use_sim_time", rclpy.Parameter.Type.BOOL, use_sim_time)
+        ])
+
+        # 画像は取りこぼしても構わない (最新フレームだけ見る)。odom は
+        # 欠けると経路追従が破綻するので信頼性を落とさない。
+        img_qos = QoSProfile(depth=1,
+                             reliability=QoSReliabilityPolicy.BEST_EFFORT)
+
+        self.cmd_pub = self.node.create_publisher(
+            Twist, f"{robot_ns}/cmd_vel", 10)
+        self.node.create_subscription(
+            Odometry, f"{robot_ns}/odom", self._odom_callback, 10)
+        self.node.create_subscription(
+            Image, f"{robot_ns}/image_raw2", self._image_callback, img_qos)
+
+        self._executor = SingleThreadedExecutor()
+        self._executor.add_node(self.node)
+        self._spin_thread = threading.Thread(
+            target=self._executor.spin, daemon=True)
+        self._spin_thread.start()
 
         self.current_pose = None
         self.current_image = None
 
-        self.cross_lines = self._load_cross_lines("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/cross_markers_400.csv")
-        # self.cross_lines = self._load_cross_lines("/home/icon-group/catkin_ws/src/aws-robomaker-hospital-world/src/cross_lines.csv")
+        self.cross_lines = self._load_cross_lines(_resolve_data_file(
+            "JEPA_CROSS_MARKERS", "cross_markers_400.csv",
+            "通過判定線の CSV (列 x1, y1, x2, y2)"))
         
         self.visited_lines = set()
         self.total_lines = len(self.cross_lines)
@@ -886,7 +1008,7 @@ class GazeboEnv(Env):
         self.current_pose = msg.pose.pose
 
     def _image_callback(self,msg):
-        self.img_src= self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        self.img_src= imgmsg_to_bgr8(msg)
         cleaned = cv2.GaussianBlur(self.img_src, (3,3), 0)
 
         self.current_image = cleaned #self.transform_image_cv2_dark(cleaned)  #(self.img_src.copy())
@@ -1070,40 +1192,14 @@ class GazeboEnv(Env):
 
     def reset(self, seed=None, options=None):
 
-        def is_gazebo_paused():
-            rospy.wait_for_service('/gazebo/get_physics_properties')
-            try:
-                get_physics = rospy.ServiceProxy('/gazebo/get_physics_properties', GetPhysicsProperties)
-                physics = get_physics()
-                return physics.pause  # True if paused, False if running
-            except rospy.ServiceException as e:
-                rospy.logerr(f"Service call failed: {e}")
-                return None
-
-        def pause_gazebo():
-            rospy.wait_for_service('/gazebo/pause_physics')
-            pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
-            pause()
-            # rospy.loginfo("Simulation paused")
-
-        def unpause_gazebo():
-            rospy.wait_for_service('/gazebo/unpause_physics')
-            unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
-            unpause()
-            # rospy.loginfo("Simulation running")
-
-        paused = is_gazebo_paused()
-        if paused is None:
-            print("Could not determine Gazebo state.")
-        elif paused:
-            print("Gazebo is currently PAUSED.")
-            unpause_gazebo()
-        else:
-            print("running")
+        # Classic は /gazebo/get_physics_properties で一時停止状態を問い合わせて
+        # いたが、Harmonic に同等のサービスはない。状態を読まずに常に unpause を
+        # 送る方が単純で、既に走っていても無害である。
+        self.gz.unpause()
 
         """Reset the environment and return the first observation."""
         # super().reset(seed=seed)
-        rospy.loginfo("Resetting GazeboEnv...")
+        self.node.get_logger().info("Resetting GazeboEnv...")
         self._stop_robot()
 
         self.current_pose = None
@@ -1135,53 +1231,48 @@ class GazeboEnv(Env):
        
 
         
-        rospy.wait_for_service('/gazebo/set_model_state')
-        set_model_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
-        
-        # 
+        # ロボットを初期姿勢へ戻す。Classic の /gazebo/set_model_state を
+        # Harmonic の /world/<name>/set_pose に置き換えた。
+        #
+        # Classic の SetModelState は twist (速度) も 0 に指定できたが、
+        # Harmonic の set_pose は姿勢のみである。速度を止めるため cmd_vel に 0 を
+        # 送ってから姿勢を変える。
+        #
+        # reset_all() は使えない。world SDF に書かれていない実行時 spawn の
+        # モデルを削除してしまい、launch で置いたロボットが world から消える
+        # (gz_world_control.py の docstring 参照)。
+        #
+        # 初期姿勢は jetbot_tellus.launch.py の既定値と揃えている。
+        x_pos = float(os.environ.get("JEPA_INIT_X", 5.163443))
+        y_pos = float(os.environ.get("JEPA_INIT_Y", 7.766847))
+        z_pos = float(os.environ.get("JEPA_INIT_Z", 0.0))
+        yaw = float(os.environ.get("JEPA_INIT_YAW", -1.573762))
 
-        # Define robot initial pose (from launch file)
-        x_pos = 5.163443
-        y_pos = 7.766847
-        z_pos = 0.0
-        yaw   = -1.573762
-
-        # x_pos =-4.978963185574756
-        # y_pos = 2.1908339594290007
-        # z_pos = 0.0
-        # yaw   = 1.4610034096408715
-
-        # Convert yaw → quaternion
-        quat = tft.quaternion_from_euler(0, 0, yaw)
-
-        # Create model state message
-        state = ModelState()
-        state.model_name = "jetbot_1"
-        state.pose.position.x = x_pos
-        state.pose.position.y = y_pos
-        state.pose.position.z = z_pos
-        state.pose.orientation.x = quat[0]
-        state.pose.orientation.y = quat[1]
-        state.pose.orientation.z = quat[2]
-        state.pose.orientation.w = quat[3]
-        state.twist.linear.x = 0.0
-        state.twist.linear.y = 0.0
-        state.twist.linear.z = 0.0
-        state.twist.angular.x = 0.0
-        state.twist.angular.y = 0.0
-        state.twist.angular.z = 0.0
-        state.reference_frame = "world"
+        self.cmd_pub.publish(Twist())  # 速度を 0 にする
 
         try:
-            set_model_state(state)
-            rospy.loginfo("Robot reset to initial position and zero velocity.")
-        except rospy.ServiceException as e:
-            rospy.logerr(f"Failed to reset robot model: {e}")
+            self.gz.set_pose(self.robot_model_name,
+                             x=x_pos, y=y_pos, z=z_pos, yaw=yaw)
+            self.node.get_logger().info("Robot reset to initial position.")
+        except Exception as e:
+            self.node.get_logger().error(f"Failed to reset robot model: {e}")
 
         # Wait for sensors to update
         # rospy.sleep(1.0)
-        while (self.current_pose is None or self.current_image is None) and not rospy.is_shutdown():
-            rospy.sleep(0.400)
+        # センサの初回データを待つ。ここは sim 時間で待つ意味がない
+        # (コールバックが届くかどうかだけの問題) ので壁時計で待つ。
+        # sim 時間で待つと実時間係数が低い環境で _sleep の安全弁に当たり、
+        # 「完了しなかった」警告が出てしまう。
+        _wait_start = time.monotonic()
+        while (self.current_pose is None or self.current_image is None) and self._ok():
+            if time.monotonic() - _wait_start > 30.0:
+                self.node.get_logger().error(
+                    "30 秒待っても odom または image_raw2 が届かない。"
+                    "Gazebo と ros_gz_bridge が起動しているか、"
+                    f"トピック名 ({self.robot_ns}/odom, "
+                    f"{self.robot_ns}/image_raw2) が合っているか確認すること。")
+                break
+            time.sleep(0.05)
 
         # Get observation
         # rospy.sleep(0.1)
@@ -1206,40 +1297,18 @@ class GazeboEnv(Env):
 
     def step(self, action):
 
-        def is_gazebo_paused():
-            rospy.wait_for_service('/gazebo/get_physics_properties')
-            try:
-                get_physics = rospy.ServiceProxy('/gazebo/get_physics_properties', GetPhysicsProperties)
-                physics = get_physics()
-                return physics.pause  # True if paused, False if running
-            except rospy.ServiceException as e:
-                rospy.logerr(f"Service call failed: {e}")
-                return None
-
-        def pause_gazebo():
-            rospy.wait_for_service('/gazebo/pause_physics')
-            pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
-            pause()
-            # rospy.loginfo("Simulation paused")
-
-        def unpause_gazebo():
-            rospy.wait_for_service('/gazebo/unpause_physics')
-            unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
-            unpause()
-            # rospy.loginfo("Simulation running")
-
-        paused = is_gazebo_paused()
-        if paused is None:
-            print("Could not determine Gazebo state.")
-        elif paused:
-            # print("Gazebo is currently PAUSED.")
-            unpause_gazebo()
-        else:
-            print("Gazebo is currently RUNNING.")
+        # Classic は毎 step で /gazebo/get_physics_properties を呼んで一時停止
+        # 状態を確認し、止まっていれば unpause していた。Harmonic に状態取得の
+        # サービスはないので、常に unpause を送る。
+        #
+        # なお毎 step サービスを叩くのは無駄なので、本来は reset の時だけで
+        # 足りる。元の実装を踏襲して残しているが、学習速度が問題になるなら
+        # ここは削れる。
+        self.gz.unpause()
 
         """Apply action and return (obs, reward, done, truncated, info)."""
         if self.current_pose is None or self.current_image is None:
-            rospy.logwarn("No data yet.")
+            self.node.get_logger().warn("No data yet.")
             # return np.zeros(self.observation_space.shape), 0.0, False, False, {}
         
         
@@ -1260,17 +1329,25 @@ class GazeboEnv(Env):
 
         # rospy.loginfo(f"linear_speed: {linear_speed} → angular_z={angular_z:.2f}")
         cmd = Twist()
-        cmd.linear.x = linear_speed
-        cmd.angular.z = angular_z
+        # rclpy の float フィールドは Python の float を厳格に要求する
+        # (PyFloat_Check)。rospy は int や numpy スカラを暗黙に受け付けていたが、
+        # ROS 2 では次のように落ちる。
+        #   geometry_msgs__msg__vector3__convert_from_py:
+        #   Assertion `PyFloat_Check(field)' failed.
+        # gymnasium の action は numpy スカラで渡ってくるため、明示的に変換する。
+        cmd.linear.x = float(linear_speed)
+        cmd.angular.z = float(angular_z)
         self.cmd_pub.publish(cmd)
 
         # time.sleep(1) 
-        rospy.sleep(0.0350) 
+        self._sleep(0.0350)
         # pause_gazebo()
 
         obs = self._get_obs()
         reward, terminated ,truncated = self._compute_reward()
-        pause_gazebo()
+        # 元は毎 step の最後に pause_gazebo() を呼んでいたが、直後の
+        # step() 冒頭で unpause しており実質無意味なうえ、サービス往復が
+        # 2 倍になる。観測は上の _get_obs() で取り終えているので外した。
         # print(obs.shape)
         info = {}
         # if self.render_mode == "human":
@@ -1297,7 +1374,7 @@ class GazeboEnv(Env):
     # --- Time limit termination ---
         too_long = False
         if elapsed_time > 3600:  # 1 hour = 3600 seconds
-            rospy.logwarn("⏰ Episode terminated due to time limit (1 hour).")
+            self.node.get_logger().warn("Episode terminated due to time limit (1 hour).")
             too_long = True
 
         # If first step, skip crossing check
@@ -1350,7 +1427,7 @@ class GazeboEnv(Env):
 
         brake_stop_terminated = False
         if getattr(self, "brake_frames", 0) >= getattr(self, "brake_terminate_threshold", 10):
-            rospy.logwarn("🚨 Robot braked and stopped for too long — terminating episode.")
+            self.node.get_logger().warn("Robot braked and stopped for too long, terminating episode.")
             brake_stop_terminated = True
 
         min_rewad_terminated = False
@@ -1368,35 +1445,93 @@ class GazeboEnv(Env):
     
     def _stop_robot(self):
         cmd = Twist()
-        cmd.linear.x = 0
-        cmd.angular.z = 0
+        cmd.linear.x = 0.0
+        cmd.angular.z = 0.0
         self.cmd_pub.publish(cmd)
         if self.render_mode == "human":
             cv2.destroyAllWindows()
-        # rospy.sleep(0.5)
-        rospy.loginfo("Robot stopped.")
+        self.node.get_logger().info("Robot stopped.")
+
+    # ---- rospy.sleep / rospy.is_shutdown の代替 -------------------------
+
+    def _sleep(self, seconds, wall_timeout=None):
+        """sim 時間で待つ。rospy.sleep の代替。
+
+        rospy.sleep は /use_sim_time が有効なとき sim 時間で待っていた。
+        time.sleep に置き換えると壁時計で待つことになり、実時間係数が 1 を
+        下回る環境 (この構成では 0.26 程度) では待ち時間の意味が変わる。
+        そこでノードのクロックで測る。
+
+        sim が一時停止すると sim 時間が進まず永久に待つことになるので、
+        壁時計の上限を設けて抜ける。既定では要求の 20 倍か 5 秒の大きい方。
+        """
+        clock = self.node.get_clock()
+        end = clock.now() + Duration(seconds=seconds)
+        if wall_timeout is None:
+            wall_timeout = max(seconds * 20.0, 5.0)
+        wall_start = time.monotonic()
+        while clock.now() < end:
+            if time.monotonic() - wall_start > wall_timeout:
+                self.node.get_logger().warn(
+                    f"_sleep({seconds}) が sim 時間で完了しなかった "
+                    f"(壁時計 {wall_timeout:.1f} 秒で打ち切り)。"
+                    f"Gazebo が一時停止しているか /clock が来ていない。")
+                return
+            time.sleep(0.001)
+
+    def _ok(self):
+        """rospy.is_shutdown() の反転。"""
+        return rclpy.ok()
+
+    # ---- 後片付け -------------------------------------------------------
+
+    def close(self):
+        """gymnasium.Env.close()。executor スレッドを止めてノードを破棄する。
+
+        これを呼ばないと daemon スレッドがプロセス終了まで残る。
+        """
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
+
+        # 順序が重要。executor を止める前にノードを破棄すると、spin 中の
+        # executor が破棄済みのオブジェクトに触って次の通知が出る。
+        #   The following exception was never retrieved:
+        #   cannot use Destroyable because destruction was requested
+        try:
+            self._executor.shutdown(timeout_sec=2.0)
+        except Exception:
+            pass
+        if self._spin_thread.is_alive():
+            self._spin_thread.join(timeout=2.0)
+        try:
+            self._executor.remove_node(self.node)
+        except Exception:
+            pass
+        try:
+            self.node.destroy_node()
+        except Exception:
+            pass
+        if self._owns_context and rclpy.ok():
+            rclpy.shutdown()
 
     
 if __name__ == "__main__":
-    rospy.init_node("gazebo_env")
-
-    env = GazeboEnv("/home/icon-group/catkin_ws/src/i_jepa/jepa_world_laptop/jepa_world/src/path_points.csv")
-    # env = GazeboEnv("/home/icon-group/catkin_ws/src/aws-robomaker-hospital-world/src/path_points.csv")
-   
-    obs, info = env.reset()
-    # while(1):
-    # for act in [
-    # [0,0,0,1,0],  # gas
-    # [0,0,0,1,0],  # steer right
-    # [0,1,0,0,0],  # steer left
-    # [0,1,0,0,0],  # brake
-    # [0,0,0,1,0],  # brake
-    #     ]:
-    while not rospy.is_shutdown():
-        reward, terminated ,truncated  = env._compute_reward()
-        # obs, reward, terminated ,truncated, info = env.step(act)
-        print("Reward:", reward, "terminated:", terminated, "truncated:", truncated)
-        # time.sleep(0.4)
+    # rclpy.init() と Node の生成は GazeboEnv.__init__ が行う。
+    # rospy.init_node に相当する明示的な初期化は不要。
+    env = GazeboEnv()
+    try:
+        obs, info = env.reset()
+        print("reset 完了:", obs.shape, info)
+        while env._ok():
+            reward, terminated, truncated = env._compute_reward()
+            print("Reward:", reward,
+                  "terminated:", terminated, "truncated:", truncated)
+            env._sleep(0.4)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        env.close()
 
 
 

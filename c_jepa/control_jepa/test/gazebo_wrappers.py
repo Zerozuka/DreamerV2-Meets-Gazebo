@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-import gym
-import numpy as np
 import cv2
-import rospy
 import gymnasium as gym
+import numpy as np
+
+# 旧 OpenAI Gym の import (import gym) は削除した。gymnasium と併存すると
+# gym.Env と gymnasium.Env が別クラスになり、ラッパーの継承関係が壊れる。
+# rospy も削除した。ロギングは呼び出し側の env が持つノードを使う。
 
 
 def preprocess(img):
@@ -44,7 +46,7 @@ class ImageEnv(gym.Wrapper):
         obs, info = self.env.reset(*args, **kwargs)
 
         # Perform initial no-op steps (simply move forward slightly)
-        rospy.loginfo(f"Performing {self.initial_no_op} no-op steps...")
+        print(f"Performing {self.initial_no_op} no-op steps...")
         
         for _ in range(self.initial_no_op):
             # dummy_action = np.zeros(self.env.action_space.shape[0], dtype=np.float32)

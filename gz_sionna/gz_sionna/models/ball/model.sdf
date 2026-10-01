@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  復元したラッパー。メッシュは上流同梱の models/jepa_objects/ball.obj を
+  そのまま参照しており、ファイルは複製していない。
+
+  static を true にしている。球なので物理を有効にすると転がってシーンが
+  変わってしまい、エピソード間で再現しなくなる。静的障害物として扱うのが
+  妥当と判断した。上流の意図は未確認。
+-->
+<sdf version="1.7">
+  <model name="ball">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://jepa_objects/ball.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://jepa_objects/ball.obj</uri>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

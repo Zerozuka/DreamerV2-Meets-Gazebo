@@ -12,6 +12,13 @@ from tqdm.auto import tqdm
 import pickle
 import os
 import cv2
+# paths.py は gz_sionna/src に置いて全パッケージで共有している。
+# gz_sionna はまだ Python モジュールを install していないので share のパスを通す。
+import os as _p_os
+import sys as _p_sys
+from ament_index_python.packages import get_package_share_directory as _p_share
+_p_sys.path.insert(0, _p_os.path.join(_p_share('gz_sionna'), 'src'))
+from paths import model_path
 
 
 
@@ -206,7 +213,7 @@ if __name__ == "__main__":
 
     device = "cuda"
     # model_path = "path/to/saved_model.pth"
-    model_path = "/home/icon-group/catkin_ws/src/i_jepa/control_jepa/test/results/CarRacing-v2_0_pomdp/gym_31_oct/models_1980000.pth"
+    model_path = model_path("results", "CarRacing-v2_0_pomdp", "gym_31_oct", "models_1980000.pth")
 
     env = gym.make("CarRacing-v2", continuous=False, render_mode="human")
     env = OneHotAction(ImageEnv(env))

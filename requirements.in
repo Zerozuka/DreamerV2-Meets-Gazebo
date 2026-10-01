@@ -1,0 +1,54 @@
+# Python dependencies installed with uv into the workspace virtual environment.
+#
+# This file is edited by hand; requirements.lock is generated from it and is the
+# file that actually gets installed. See README.md ("Set up the environment").
+#
+#   uv pip compile requirements.in -o requirements.lock --python-version 3.12 --torch-backend cpu
+#
+# The same --torch-backend flag is needed when installing, because the PyTorch
+# index that serves the +cpu wheels is not recorded in the lock file:
+#
+#   uv pip sync requirements.lock --torch-backend cpu
+#
+# Everything ROS 2 provides (rclpy, the message packages, tf_transformations,
+# ament_index_python) comes from apt and is NOT listed here. The virtual
+# environment is created with --system-site-packages so those stay visible.
+
+# --- Sionna ------------------------------------------------------------------
+# Pulls in sionna-rt, mitsuba, drjit and torch. Requires numpy >= 2.2.6, which
+# is why the whole workspace runs on NumPy 2.
+sionna>=2.2
+
+# --- NumPy -------------------------------------------------------------------
+# Pinned to 2.x explicitly so a resolver change can never silently drop the
+# workspace back to NumPy 1 (Sionna 2.x does not work on NumPy 1).
+numpy>=2.2.6
+
+# --- Replacements for apt packages that break under NumPy 2 ------------------
+# The apt build of transforms3d calls np.maximum_sctype, removed in NumPy 2.0.
+# tf_transformations itself is fine; it just imports this.
+transforms3d>=0.4.2
+# apt python3-opencv (4.6.0) is compiled against the NumPy 1 C API.
+opencv-python>=4.10
+
+# --- Reinforcement learning --------------------------------------------------
+gymnasium>=1.0
+# dreamerv2/utils/wrapper.py imports this at module level, so train_gazebo.py
+# needs it even when training in Gazebo rather than on MinAtar.
+minatar>=1.0
+
+# --- Logging, plotting, utilities used by the entry-point scripts ------------
+matplotlib>=3.8
+pandas>=2.0
+tqdm>=4.66
+psutil>=5.9
+wandb>=0.17
+
+# --- Not listed on purpose ---------------------------------------------------
+# gym (the pre-gymnasium package) is imported by control_jepa/test/pomdp.py
+#   only. It has no wheel for Python 3.12 and is superseded by gymnasium.
+#   Tracked in issue #10.
+# torchrl / tensordict are imported by control_jepa/test/DQN_model_.py only,
+#   which is an unused variant of DQN_model.py. Add them here if that script
+#   is revived.
+# cv_bridge is deliberately gone; see gz_sionna/src/ros_image.py.

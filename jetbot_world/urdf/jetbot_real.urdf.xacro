@@ -33,10 +33,13 @@
         <color rgba="0.223529411764706 1 0.352941176470588 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (3156 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="0.000000 0.000000 0.005922"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/base_link.STL"/>
+        <box size="0.199396 0.184447 0.093266"/>
       </geometry>
     </collision>
   </link>
@@ -55,19 +58,23 @@
         <color rgba="0.952941176470588 0.796078431372549 0.486274509803922 1"/>
       </material>
     </visual>
-    <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
-      <geometry>
-        <mesh filename="package://jetbot_world/meshes/wheels/wheel_right_link.STL"/>
-      </geometry>
-    </collision>
+    <!-- 衝突形状を削除した。タイヤの内側にあり接地しない。
+         元は meshes/wheels/wheel_right_link.STL (1002 三角形) を使っていた。 -->
   </link>
   <joint name="wheel_right_joint" type="continuous">
     <origin rpy="-1.57079632679489 0 0" xyz="0 -0.0796 -0.0149998499189951"/>
     <parent link="base_link"/>
     <child link="wheel_right_link"/>
     <axis xyz="0 0 1"/>
-    <limit effort="0" lower="0" upper="0" velocity="0"/>
+    <!-- SolidWorks エクスポータが effort="0" velocity="0" を出力していた。
+         Gazebo Classic の libgazebo_ros_diff_drive は limit を無視して車輪速度を
+         直接与えていたため実害がなかったが、gz-sim の DiffDrive は limit を
+         尊重するので、0 のままだとトルク上限 0 で車輪が回らない。
+
+         effort は Classic 版プラグインの wheelTorque 10 に合わせた。
+         velocity は gazebo_env.py の max_linear_speed=1.0 [m/s] と
+         車輪半径 0.033 [m] から 1.0 / 0.033 = 30.3 [rad/s] とした。 -->
+    <limit effort="10" velocity="30.3"/>
   </joint>
   <link name="wheel_right_rim">
     <inertial>
@@ -84,12 +91,8 @@
         <color rgba="0.188235294117647 0.231372549019608 0.588235294117647 1"/>
       </material>
     </visual>
-    <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
-      <geometry>
-        <mesh filename="package://jetbot_world/meshes/wheels/wheel_right_rim.STL"/>
-      </geometry>
-    </collision>
+    <!-- 衝突形状を削除した。タイヤの内側にあり接地しない。
+         元は meshes/wheels/wheel_right_rim.STL (3284 三角形) を使っていた。 -->
   </link>
   <joint name="wheel_right_rim_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0"/>
@@ -112,10 +115,13 @@
         <color rgba="0.0980392156862745 0.0980392156862745 0.0980392156862745 1"/>
       </material>
     </visual>
+    <!-- 接地するリンク。高精細メッシュ (13324 三角形) を
+         円柱 r=0.0325 l=0.029 で近似した。寸法は元メッシュの境界ボックス
+         (0.0650, 0.0650, 0.0290) から決めている。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="0.000008 0.000421 0.000200"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/wheels/wheel_right_tire.STL"/>
+        <cylinder radius="0.0325" length="0.029"/>
       </geometry>
     </collision>
   </link>
@@ -140,19 +146,16 @@
         <color rgba="0.952941176470588 0.796078431372549 0.486274509803922 1"/>
       </material>
     </visual>
-    <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
-      <geometry>
-        <mesh filename="package://jetbot_world/meshes/wheels/wheel_left_link.STL"/>
-      </geometry>
-    </collision>
+    <!-- 衝突形状を削除した。タイヤの内側にあり接地しない。
+         元は meshes/wheels/wheel_left_link.STL (1002 三角形) を使っていた。 -->
   </link>
   <joint name="wheel_left_joint" type="continuous">
     <origin rpy="-1.5707963267949 0 0" xyz="0 0.0796 -0.0149998499189951"/>
     <parent link="base_link"/>
     <child link="wheel_left_link"/>
     <axis xyz="0 0 1"/>
-    <limit effort="0" lower="0" upper="0" velocity="0"/>
+    <!-- wheel_right_joint と同じ理由で effort / velocity を 0 から変更した。 -->
+    <limit effort="10" velocity="30.3"/>
   </joint>
   <link name="wheel_left_rim">
     <inertial>
@@ -169,12 +172,8 @@
         <color rgba="0.188235294117647 0.231372549019608 0.588235294117647 1"/>
       </material>
     </visual>
-    <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
-      <geometry>
-        <mesh filename="package://jetbot_world/meshes/wheels/wheel_left_rim.STL"/>
-      </geometry>
-    </collision>
+    <!-- 衝突形状を削除した。タイヤの内側にあり接地しない。
+         元は meshes/wheels/wheel_left_rim.STL (3284 三角形) を使っていた。 -->
   </link>
   <joint name="wheel_left_rim_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0"/>
@@ -197,10 +196,13 @@
         <color rgba="0.0980392156862745 0.0980392156862745 0.0980392156862745 1"/>
       </material>
     </visual>
+    <!-- 接地するリンク。高精細メッシュ (13324 三角形) を
+         円柱 r=0.0325 l=0.029 で近似した。寸法は元メッシュの境界ボックス
+         (0.0650, 0.0650, 0.0290) から決めている。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="0.000417 -0.000058 -0.000200"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/wheels/wheel_left_tire.STL"/>
+        <cylinder radius="0.0325" length="0.029"/>
       </geometry>
     </collision>
   </link>
@@ -225,10 +227,13 @@
         <color rgba="0 0.345098039215686 1 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (276 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="0.089169 -0.000050 0.047555"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/realsense/camera_mount_link.STL"/>
+        <box size="0.011738 0.061000 0.012000"/>
       </geometry>
     </collision>
   </link>
@@ -253,10 +258,13 @@
         <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (56300 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="0.105063 0.000030 0.047555"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/realsense/camera_link.STL"/>
+        <box size="0.020050 0.098840 0.023000"/>
       </geometry>
     </collision>
   </link>
@@ -281,10 +289,13 @@
         <color rgba="0.627450980392157 0.627450980392157 0.627450980392157 1"/>
       </material>
     </visual>
+    <!-- 接地するリンク。高精細メッシュ (23258 三角形) を
+         球 r=0.019 で近似した。寸法は元メッシュの境界ボックス
+         (0.0455, 0.0380, 0.0400) から決めている。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.005748 0.017682 0.000000"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/caster_back_link.STL"/>
+        <sphere radius="0.019"/>
       </geometry>
     </collision>
   </link>
@@ -309,10 +320,13 @@
         <color rgba="0.627450980392157 0.627450980392157 0.627450980392157 1"/>
       </material>
     </visual>
+    <!-- 接地するリンク。高精細メッシュ (23258 三角形) を
+         球 r=0.019 で近似した。寸法は元メッシュの境界ボックス
+         (0.0455, 0.0380, 0.0400) から決めている。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.005748 0.015300 0.000000"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/caster_front_link.STL"/>
+        <sphere radius="0.019"/>
       </geometry>
     </collision>
   </link>
@@ -337,10 +351,13 @@
         <color rgba="0.5 0.5 0.5 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (100902 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.002854 -0.000460 -0.008186"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/imu_link.STL"/>
+        <box size="0.137467 0.108247 0.030150"/>
       </geometry>
     </collision>
   </link>
@@ -365,10 +382,13 @@
         <color rgba="0.250980392156863 0.250980392156863 0.250980392156863 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (79672 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.012854 0.000000 -0.000300"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/base_scan.STL"/>
+        <box size="0.097488 0.071776 0.051400"/>
       </geometry>
     </collision>
   </link>
@@ -393,10 +413,13 @@
         <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (8618 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="0.000763 0.043300 -0.022000"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/left_motor_link.STL"/>
+        <box size="0.038526 0.072600 0.036967"/>
       </geometry>
     </collision>
   </link>
@@ -421,10 +444,13 @@
         <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (8618 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.000763 -0.043300 -0.022000"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/right_motor_link.STL"/>
+        <box size="0.038526 0.072600 0.036967"/>
       </geometry>
     </collision>
   </link>
@@ -449,10 +475,13 @@
         <color rgba="0.3 0.3 0.3 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (680 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.006950 0.000300 0.062186"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/upper_plate_link.STL"/>
+        <box size="0.100000 0.079000 0.003000"/>
       </geometry>
     </collision>
   </link>
@@ -477,10 +506,13 @@
         <color rgba="0.0941176470588235 0.109803921568627 0.12156862745098 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (28672 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.066000 0.000000 0.047300"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/antenna_link.STL"/>
+        <box size="0.009980 0.130000 0.125700"/>
       </geometry>
     </collision>
   </link>
@@ -505,10 +537,13 @@
         <color rgba="0.952941176470588 0.796078431372549 0.486274509803922 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (1888 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="0.000000 0.000000 0.025843"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/bolt1_link.STL"/>
+        <box size="0.172680 0.095404 0.069686"/>
       </geometry>
     </collision>
   </link>
@@ -533,10 +568,13 @@
         <color rgba="0.0941176470588235 0.109803921568627 0.12156862745098 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (352 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.001950 0.000300 0.076186"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/bolt2_link.STL"/>
+        <box size="0.074650 0.061369 0.025000"/>
       </geometry>
     </collision>
   </link>
@@ -561,10 +599,13 @@
         <color rgba="0.4 0.4 0.4 1"/>
       </material>
     </visual>
+    <!-- 高精細メッシュ (374540 三角形) を境界ボックスの箱で
+         近似した。固定関節で base_link にまとめられるリンクで、
+         接地しないため形状の細部は挙動に影響しない。 -->
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.006950 0.001313 0.048048"/>
       <geometry>
-        <mesh filename="package://jetbot_world/meshes/other_parts/nano_link.STL"/>
+        <box size="0.100000 0.081025 0.042290"/>
       </geometry>
     </collision>
   </link>
