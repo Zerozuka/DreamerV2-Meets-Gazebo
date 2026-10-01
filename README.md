@@ -304,11 +304,50 @@ ros2 topic hz /odom
 ros2 topic hz /image_raw2
 ```
 
-You should see `/odom`, `/image_raw2`, `/cmd_vel`, `/clock`, `/imu`, `/scan`, `/joint_states`. Drive the robot by hand to confirm it moves:
+You should see `/odom`, `/image_raw2`, `/cmd_vel`, `/clock`, `/imu`, `/scan`, `/joint_states`.
+
+### Watching the robot move
+
+Opening the GUI is not enough to see anything. The Jetbot is about 17 cm long and the arena is tens of metres across, so the default camera shows the whole hall with the robot as a few grey pixels, and nothing is driving it. Two things have to happen: point the camera at the robot, and send it a velocity.
 
 ```bash
-ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
-  '{linear: {x: 0.3}, angular: {z: 0.0}}'
+.venv/bin/python tools/drive.py
+```
+
+That does both. It asks the GUI to follow `jetbot_1` with a chase camera, then drives from the keyboard:
+
+```text
+up / w      forward            down / s    backward
+left / a    turn left          right / d   turn right
+space       stop               q           quit
++ / -       faster / slower
+```
+
+To just watch without steering, let it drive a fixed pattern:
+
+```bash
+.venv/bin/python tools/drive.py --demo        # until Ctrl-C
+.venv/bin/python tools/drive.py --demo 30     # for 30 seconds
+```
+
+`--no-follow` leaves the camera alone, `--speed` and `--turn` change how fast it goes, and `--back` / `--up` move the chase camera.
+
+You can also do it by hand. In the GUI's **Entity Tree** panel, right-click `jetbot_1` and choose **Follow** to lock the camera onto it, or **Move to** to jump there once. Then publish a velocity from another terminal:
+
+```bash
+ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist \
+  '{linear: {x: 0.3}, angular: {z: 0.2}}'
+```
+
+Use `-r 10` rather than `--once`: the differential drive plugin holds the last command it received, so a single message makes the robot keep going until something sends a stop.
+
+**If the robot stops responding, it is probably wedged against a wall.** The arena has them and the Jetbot has no obstacle avoidance. Put it back at the spawn pose:
+
+```bash
+gz service -s /world/default/set_pose \
+  --reqtype gz.msgs.Pose --reptype gz.msgs.Boolean --timeout 5000 \
+  --req 'name: "jetbot_1", position: {x: 5.163443, y: 7.766847, z: 0.15},
+         orientation: {x: 0, y: 0, z: -0.707, w: 0.707}'
 ```
 
 ### Terminal 2 — the Python side
